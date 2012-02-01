@@ -1,11 +1,14 @@
 # -*- test-case-name: vumi.demos.tests.test_wikipedia -*-
 
+import json
+from urllib import urlencode
+
+import redis
 from twisted.internet.defer import inlineCallbacks, returnValue
+from twisted.python import log
+
 from vumi.application import ApplicationWorker, SessionManager
 from vumi.utils import http_request, get_deploy_int
-from urllib import urlencode
-import json
-import redis
 
 
 class WikipediaAPI(object):
@@ -147,6 +150,7 @@ class WikipediaWorker(ApplicationWorker):
 
     @inlineCallbacks
     def consume_user_message(self, msg):
+        log.msg("Received: %s" % (msg.payload,))
         user_id = msg.user()
         session = self.session_manager.load_session(user_id)
         if (not session) or (msg['content'] is None):
