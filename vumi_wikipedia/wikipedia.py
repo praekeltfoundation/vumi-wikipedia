@@ -1,4 +1,4 @@
-# -*- test-case-name: vumi.demos.tests.test_wikipedia -*-
+# -*- test-case-name: vumi_wikipedia.tests.test_wikipedia -*-
 
 import json
 from urllib import urlencode
@@ -8,7 +8,14 @@ from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.python import log
 
 from vumi.application import ApplicationWorker, SessionManager
-from vumi.utils import http_request, get_deploy_int
+from vumi.utils import http_request_full, get_deploy_int
+
+
+def either(*args):
+    for arg in args:
+        if arg is not None:
+            return arg
+    return None
 
 
 class WikipediaAPI(object):
@@ -22,17 +29,28 @@ class WikipediaAPI(object):
     # network traffic. However, Twisted only supports this easily from 11.1.
     GZIP = False
 
+    PRINT_DEBUG = False
+
+    def __init__(self, url=None, gzip=None):
+        self.url = either(url, self.URL)
+        self.gzip = either(gzip, self.GZIP)
+
     @inlineCallbacks
     def _make_call(self, params):
         params.setdefault('format', 'json')
-        url = '%s?%s' % (self.URL, urlencode(params))
+        url = '%s?%s' % (self.url, urlencode(params))
         headers = {
             'User-Agent': 'Vumi HTTP Request',
             }
-        if self.GZIP:
+        if self.gzip:
             headers['Accept-Encoding'] = 'gzip'
-        response = yield http_request(url, '', headers, method='GET')
-        returnValue(json.loads(response))
+        if self.PRINT_DEBUG:
+            print "\n=====\n\n%s /?%s\n" % ('GET', url.split('?', 1)[1])
+        response = yield http_request_full(url, '', headers, method='GET')
+        if self.PRINT_DEBUG:
+            print response.delivered_body
+            print "\n====="
+        returnValue(json.loads(response.delivered_body))
 
     @inlineCallbacks
     def search(self, query, limit=9):
@@ -77,7 +95,7 @@ class WikipediaAPI(object):
         returnValue(sections)
 
     @inlineCallbacks
-    def get_content(self, page_name, section_number):
+    def get_content(self, page_name, section_number, length_limit=500):
         """
         Return the content of a section of a page.
 
@@ -97,20 +115,7 @@ class WikipediaAPI(object):
                 })
 
         text = response['parse']['wikitext']['*']
-        returnValue(text[:500])
-
-
-def image(item, element):
-    el = item.find(element)
-    return getattr(el, 'attrib', {})
-
-
-def pretty_print_results(results, start=1):
-    """
-    Turn a list of results into an enumerate multiple choice list
-    """
-    return '\n'.join(['%s. %s' % (idx, result['text'])
-                      for idx, result in enumerate(results, start)])
+        returnValue(text[:length_limit])
 
 
 def format_options(options, start=1):
@@ -140,6 +145,10 @@ class WikipediaWorker(ApplicationWorker):
         self.session_manager = SessionManager(self.r_server,
             "%(worker_name)s:%(transport_name)s" % self.config,
             max_session_length=self.MAX_SESSION_LENGTH)
+
+        self.wikipedia = WikipediaAPI(
+            self.config.get('api_url', None),
+            self.config.get('accept_gzip', None))
 
         yield super(WikipediaWorker, self).startWorker()
 
@@ -174,7 +183,7 @@ class WikipediaWorker(ApplicationWorker):
     def process_message_searching(self, msg, session):
         query = msg['content'].strip()
 
-        results = yield WikipediaAPI().search(query)
+        results = yield self.wikipedia.search(query)
         if results:
             session['results'] = json.dumps(results)
             self.reply_to(msg, format_options(results), True)
@@ -206,7 +215,7 @@ class WikipediaWorker(ApplicationWorker):
             returnValue(session)
 
         session['page'] = selection
-        results = yield WikipediaAPI().get_sections(selection)
+        results = yield self.wikipedia.get_sections(selection)
         results = [selection] + results
         session['results'] = json.dumps(results)
         self.reply_to(msg, format_options(results), True)
@@ -219,7 +228,7 @@ class WikipediaWorker(ApplicationWorker):
         if not selection:
             session['state'] = None
             returnValue(session)
-        content = yield WikipediaAPI().get_content(
+        content = yield self.wikipedia.get_content(
             session['page'], int(msg['content'].strip()) - 1)
         ussd_cont = "%s...\n(Full content sent by SMS.)" % (content[:100],)
         self.reply_to(msg, ussd_cont, False)
