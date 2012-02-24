@@ -1,6 +1,4 @@
-# -*- test-case-name: vumi_wikipedia.tests.test_wikipedia -*-
-
-# TODO: Give this module its own set of tests.
+# -*- test-case-name: vumi_wikipedia.tests.test_text_manglers -*-
 
 
 def mangle_text(text, manglers=()):
@@ -65,7 +63,7 @@ def strip_html(text):
             if isinstance(child, Comment):
                 continue
             if isinstance(child, NavigableString):
-                output.append(child.replace('\n', ''))
+                output.append(child.replace('\n', ' '))
             else:
                 output.extend(parse_tag(child))
 
