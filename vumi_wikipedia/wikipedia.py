@@ -95,7 +95,8 @@ class WikipediaAPI(object):
         returnValue(sections)
 
     @inlineCallbacks
-    def get_content(self, page_name, section_number, length_limit=500):
+    def get_content(self, page_name, section_number, length_limit=500,
+                    content_type='wikitext'):
         """
         Return the content of a section of a page.
 
@@ -109,13 +110,17 @@ class WikipediaAPI(object):
         response = yield self._make_call({
                 'action': 'parse',
                 'page': page_name.encode('utf-8'),
-                'prop': 'wikitext',
+                'prop': content_type,
                 'section': str(section_number),
                 'redirects': '1',
                 })
+        returnValue(self.parse_content(response['parse'][content_type]['*'],
+                                       content_type, length_limit))
 
-        text = response['parse']['wikitext']['*']
-        returnValue(text[:length_limit])
+    def parse_content(self, content, content_type, length_limit):
+        if content_type == 'text':
+            return content
+        return content[:length_limit]
 
 
 class WikipediaUSSDFlow(object):
@@ -132,6 +137,7 @@ class WikipediaWorker(ApplicationWorker):
 
     MAX_SESSION_LENGTH = 3 * 60
     MAX_CONTENT_LENGTH = 160
+    CONTENT_TYPE = 'wikitext'
 
     @inlineCallbacks
     def startWorker(self):
@@ -148,6 +154,7 @@ class WikipediaWorker(ApplicationWorker):
             self.config.get('api_url', None),
             self.config.get('accept_gzip', None))
 
+        self.content_type = self.config.get('content_type', self.CONTENT_TYPE)
         yield super(WikipediaWorker, self).startWorker()
 
     @inlineCallbacks
@@ -242,7 +249,8 @@ class WikipediaWorker(ApplicationWorker):
             session['state'] = None
             returnValue(session)
         content = yield self.wikipedia.get_content(
-            session['page'], int(msg['content'].strip()) - 1)
+            session['page'], int(msg['content'].strip()) - 1,
+            content_type=self.CONTENT_TYPE)
         ussd_cont = "%s...\n(Full content sent by SMS.)" % (content[:100],)
         self.reply_to(msg, ussd_cont, False)
         if self.sms_transport:

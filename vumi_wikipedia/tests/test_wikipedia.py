@@ -124,6 +124,7 @@ class WikipediaAPITestCase(TestCase, FakeHTTPTestCaseMixin):
             self.wikipedia.get_sections('Martin Lake'), [])
 
     @inlineCallbacks
+    # @debug_api_call
     def test_get_content(self):
         yield self.assert_api_result(
             self.wikipedia.get_content('Dominion of New Zealand', 0),
