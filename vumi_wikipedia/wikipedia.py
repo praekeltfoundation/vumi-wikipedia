@@ -59,7 +59,7 @@ class WikipediaAPI(object):
 
         Parameters
         ----------
-        query : str
+        query : unicode
             The search term.
         limit : int, optional
             How many results to get back, defaults to 9.
@@ -80,7 +80,7 @@ class WikipediaAPI(object):
 
         Parameters
         ----------
-        page_name : str
+        page_name : unicode
             The name of the page to query.
         """
         response = yield self._make_call({
@@ -102,7 +102,7 @@ class WikipediaAPI(object):
 
         Parameters
         ----------
-        page_name : str
+        page_name : unicode
             The name of the page to query.
         section_number : int
             The section number to retrieve.
@@ -265,7 +265,7 @@ class WikipediaWorker(ApplicationWorker):
             session['state'] = None
             returnValue(session)
 
-        session['page'] = selection
+        session['page'] = json.dumps(selection)
         results = yield self.wikipedia.get_sections(selection)
         results = [selection] + results
         results, msgcontent = self.make_options(results)
@@ -280,8 +280,9 @@ class WikipediaWorker(ApplicationWorker):
         if not selection:
             session['state'] = None
             returnValue(session)
+        page = json.loads(session['page'])
         content = yield self.wikipedia.get_content(
-            session['page'], int(msg['content'].strip()) - 1,
+            page, int(msg['content'].strip()) - 1,
             content_type=self.content_type)
         ussd_cont = "%s...\n(Full content sent by SMS.)" % (content[:100],)
         self.reply_to(msg, ussd_cont, False)
