@@ -31,7 +31,6 @@ class FakeHTTP(Protocol):
         headers, _, body = data.partition('\r\n\r\n')
         headers = headers.splitlines()
         request_line = headers.pop(0).rsplit(' ', 1)[0]
-        # print request_line
         return request_line, body
 
     def build_response(self, response_data):
@@ -184,6 +183,20 @@ class WikipediaAPITestCase(TestCase, FakeHTTPTestCaseMixin):
             u'Insects of South Africa]]\n\n{{Oidaematophorini-stub}}\n\n'
             u'[[vi:Hellinsia tripunctatus]]')
 
+    @inlineCallbacks
+    def test_unicode_normalization(self):
+        yield self.assert_api_result(
+            self.wikipedia.get_content('Kenya', 4, content_type='text'),
+            u"Prehistory:\nGiant crocodile fossils have been discovered in "
+            u"Kenya, dating from the Mesozoic Era, over 200 million "
+            u"years ago. The fossils were found in an excavation conducted "
+            u"by a team from the University of Utah and the National Museums "
+            u"of Kenya in July-August 2004 at Lokitaung Gorge, near Lake "
+            u"Turkana.\nFossils found in East Africa suggest that primates "
+            u"roamed the area more than 20 million years ago. Recent "
+            u"finds near Kenya's Lake Turkana indicate that hominids such as "
+            u"Homo habilis (1.8 and 2.5")
+
 
 class WikipediaWorkerTestCase(TestCase, FakeHTTPTestCaseMixin):
     transport_name = 'sphex'
@@ -243,6 +256,13 @@ class WikipediaWorkerTestCase(TestCase, FakeHTTPTestCaseMixin):
 
     def get_dispatched_messages(self):
         return self.broker.get_messages('vumi', self.rkey('outbound'))
+
+    @inlineCallbacks
+    def search_for_content(self, search, result=1, section=1):
+        yield self.dispatch(self.mkmsg_in(None))  # Start session.
+        yield self.dispatch(self.mkmsg_in(search))  # Search keyword.
+        yield self.dispatch(self.mkmsg_in(str(result)))  # Select result.
+        yield self.dispatch(self.mkmsg_in(str(section)))  # Select section.
 
     def test_make_options(self):
         self.assertEqual((['foo', 'bar'], "1. foo\n2. bar"),
@@ -348,49 +368,17 @@ class WikipediaWorkerTestCase(TestCase, FakeHTTPTestCaseMixin):
     @inlineCallbacks
     def test_happy_flow_text(self):
         self.worker.content_type = 'text'
-        yield self.dispatch(self.mkmsg_in(None))
-        self.assertEqual('What would you like to search Wikipedia for?',
-                         self.get_dispatched_messages()[-1]['content'])
+        yield self.search_for_content('africa', 1, 2)
 
-        yield self.dispatch(self.mkmsg_in('africa'))
-        self.assertEqual('\n'.join([
-                    u'1. Africa',
-                    u'2. .africa',
-                    u'3. African American',
-                    u'4. North Africa',
-                    u'5. Kenya',
-                    u'6. Sub-Saharan Africa',
-                    u'7. Africa (Roman province)',
-                    u'8. African people',
-                    ]),
-                         self.get_dispatched_messages()[-1]['content'])
-
-        yield self.dispatch(self.mkmsg_in('1'))
-        self.assertEqual('\n'.join([
-                    u'1. Africa',
-                    u'2. Etymology',
-                    u'3. History',
-                    u'4. Geography',
-                    u'5. Biodiversity',
-                    u'6. Politics',
-                    u'7. Economy',
-                    u'8. Demographics',
-                    u'9. Languages',
-                    u'10. Culture',
-                    u'11. Religion',
-                    ]),
-                         self.get_dispatched_messages()[-1]['content'])
-
-        yield self.dispatch(self.mkmsg_in('2'))
         content = (
-            u'Etymology\nAfri was a Latin name used to refer to the '
+            u'Etymology:\nAfri was a Latin name used to refer to the '
             u'Carthaginians who dwelt in North Africa in modern-day Tunisia. '
             u'Their name is usually connected with Phoenician afar, "dust", '
-            u'but a 1981 hypothesis[1] has asserted that it stems from the '
+            u'but a 1981 hypothesis has asserted that it stems from the '
             u'Berber word ifri or ifran meaning "cave" and "caves", in '
-            u'reference to cave dwellers.[2] Africa or Ifri or Afer[2] is the '
+            u'reference to cave dwellers. Africa or Ifri or Afer is the '
             u'name of Banu Ifran from Algeria and Tripolitania (Berber Tribe '
-            u'of Yafran).[3]\nUnder Roman rule, Carthage became the capital '
+            u'of Yafran).\nUnder Roman rule, Carthage became the capital '
             u'of Africa Provin')
         self.assertEqual(
             "%s...\n(Full content sent by SMS.)" % (content[:100],),
