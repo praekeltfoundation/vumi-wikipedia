@@ -201,6 +201,7 @@ class WikipediaWorkerTestCase(TestCase, FakeHTTPTestCaseMixin):
         worker = get_stubbed_worker(WikipediaWorker, config, self.broker)
         self._workers.append(worker)
         yield worker.startWorker()
+        self.wikipedia = worker.wikipedia
         returnValue(worker)
 
     def mkmsg_in(self, content):
@@ -281,6 +282,47 @@ class WikipediaWorkerTestCase(TestCase, FakeHTTPTestCaseMixin):
             u'asserted that it stems from the [[Berber language|Berber]] word '
             u'\'\'ifri\'\' or \'\'ifran\'\' meaning "cave" and "caves", in '
             u'reference to cave dweller')
+        self.assertEqual(
+            "%s...\n(Full content sent by SMS.)" % (content[:100],),
+            self.get_dispatched_messages()[-2]['content'])
+        self.assertEqual(content[:250],
+                         self.get_dispatched_messages()[-1]['content'])
+
+    @inlineCallbacks
+    # @debug_api_call
+    def test_happy_flow_unicode(self):
+        yield self.dispatch(self.mkmsg_in(None))
+        self.assertEqual('What would you like to search Wikipedia for?',
+                         self.get_dispatched_messages()[-1]['content'])
+
+        yield self.dispatch(self.mkmsg_in('zundapp'))
+        self.assertEqual('\n'.join([
+                    u'1. Z\xfcndapp',
+                    u'2. Z\xfcndapp Janus',
+                    u'3. List of Cars characters',
+                    u'4. Casal',
+                    u'5. Berliner Motor Corporation',
+                    u'6. Lightning McQueen',
+                    u'7. Thomas Kretschmann',
+                    u'8. BMW R75',
+                    ]),
+                         self.get_dispatched_messages()[-1]['content'])
+
+        yield self.dispatch(self.mkmsg_in('1'))
+        self.assertEqual('\n'.join([
+                    u'1. Z\xfcndapp',
+                    u'2. See also',
+                    u'3. References',
+                    u'4. External links',
+                    ]),
+                         self.get_dispatched_messages()[-1]['content'])
+
+        yield self.dispatch(self.mkmsg_in('2'))
+        content = (
+            u"==See also==\n[[Image:Z\u00fcndappN\u00e4hmaschine2.jpg|thumb"
+            u"|A Z\u00fcndapp sewing machine]]\n*[[BMW motorcycles|BMW "
+            u"(motorcycles)]]\n*[[\u010cezeta]]\n*[[Heinkel]]\n*[[Maico]]\n"
+            u"*[[MZ Motorrad- und Zweiradwerk GmbH]]")
         self.assertEqual(
             "%s...\n(Full content sent by SMS.)" % (content[:100],),
             self.get_dispatched_messages()[-2]['content'])
