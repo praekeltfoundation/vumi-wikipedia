@@ -95,8 +95,8 @@ class WikipediaAPI(object):
         returnValue(sections)
 
     @inlineCallbacks
-    def get_content(self, page_name, section_number, length_limit=500,
-                    content_type='wikitext'):
+    def get_content(self, page_name, section_number, content_type='wikitext',
+                    length_limit=500):
         """
         Return the content of a section of a page.
 
@@ -119,8 +119,40 @@ class WikipediaAPI(object):
 
     def parse_content(self, content, content_type, length_limit):
         if content_type == 'text':
-            return content
+            return self.parse_html(content)[:length_limit]
         return content[:length_limit]
+
+    CSS_CLASSES_TO_IGNORE = set([
+            'thumbcaption',  # Caption text for thumbnail images.
+            'editsection',  # Caption text for thumbnail images.
+            ])
+
+    TAGS_TO_NEWLINE = set(['p', 'br', 'h1', 'h2', 'h3', 'h4'])
+
+    def _parse_html(self, tag):
+        from BeautifulSoup import NavigableString, Comment
+        output = []
+
+        if tag.get('class', None) in self.CSS_CLASSES_TO_IGNORE:
+            return []
+
+        for child in tag.contents:
+            if isinstance(child, Comment):
+                continue
+            if isinstance(child, NavigableString):
+                output.append(child.replace('\n', ''))
+            else:
+                output.extend(self._parse_html(child))
+
+        if tag.name in self.TAGS_TO_NEWLINE:
+            output.append('\n')
+
+        return output
+
+    def parse_html(self, content):
+        from BeautifulSoup import BeautifulSoup
+        soup = BeautifulSoup(content)
+        return ''.join(self._parse_html(soup)).strip()
 
 
 class WikipediaUSSDFlow(object):
@@ -250,7 +282,7 @@ class WikipediaWorker(ApplicationWorker):
             returnValue(session)
         content = yield self.wikipedia.get_content(
             session['page'], int(msg['content'].strip()) - 1,
-            content_type=self.CONTENT_TYPE)
+            content_type=self.content_type)
         ussd_cont = "%s...\n(Full content sent by SMS.)" % (content[:100],)
         self.reply_to(msg, ussd_cont, False)
         if self.sms_transport:

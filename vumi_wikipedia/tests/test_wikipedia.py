@@ -124,7 +124,6 @@ class WikipediaAPITestCase(TestCase, FakeHTTPTestCaseMixin):
             self.wikipedia.get_sections('Martin Lake'), [])
 
     @inlineCallbacks
-    # @debug_api_call
     def test_get_content(self):
         yield self.assert_api_result(
             self.wikipedia.get_content('Dominion of New Zealand', 0),
@@ -137,6 +136,20 @@ class WikipediaAPITestCase(TestCase, FakeHTTPTestCaseMixin):
             u"measure of [[self-government]] following the [[New Zealand "
             u"Constitution Act 1852]]. New Zealand chose not to take part in "
             u"[[Australian Federati")
+
+    @inlineCallbacks
+    def test_get_content_html(self):
+        yield self.assert_api_result(
+            self.wikipedia.get_content('Dominion of New Zealand', 0,
+                                       content_type='text'),
+            u"The Dominion of New Zealand is the former name of the Realm of "
+            u"New Zealand.\nOriginally administered from New South Wales, "
+            u"New Zealand became a direct British colony in 1841 and "
+            u"received a large measure of self-government following the New "
+            u"Zealand Constitution Act 1852. New Zealand chose not to take "
+            u"part in Australian Federation and assumed complete "
+            u"self-government as the Dominion of New Zealand on 26 September "
+            u"1907, Dominion Day, by proclamation of King Edward VII.")
 
     @inlineCallbacks
     def test_get_content_shorter(self):
@@ -182,7 +195,7 @@ class WikipediaWorkerTestCase(TestCase, FakeHTTPTestCaseMixin):
         yield self.start_webserver(WIKIPEDIA_RESPONSES)
         self.broker = FakeAMQPBroker()
         self._workers = []
-        self.worker = yield self.get_worker()
+        yield self.get_worker()
 
     @inlineCallbacks
     def tearDown(self):
@@ -191,18 +204,22 @@ class WikipediaWorkerTestCase(TestCase, FakeHTTPTestCaseMixin):
         yield self.stop_webserver()
 
     @inlineCallbacks
-    def get_worker(self, config=None):
-        if not config:
-            config = {
-                'worker_name': 'wikitest',
-                'sms_transport': 'sphex',
-                'api_url': self.url,
-                }
-        config.setdefault('transport_name', self.transport_name)
-        worker = get_stubbed_worker(WikipediaWorker, config, self.broker)
-        self._workers.append(worker)
-        yield worker.startWorker()
-        returnValue(worker)
+    def get_worker(self, **config_extras):
+        if hasattr(self, 'worker'):
+            self._workers.remove(self.worker)
+            yield self.worker.stopWorker()
+        config = {
+            'transport_name': self.transport_name,
+            'worker_name': 'wikitest',
+            'sms_transport': 'sphex',
+            'api_url': self.url,
+            }
+        config.update(config_extras)
+        self.worker = get_stubbed_worker(WikipediaWorker, config, self.broker)
+        self._workers.append(self.worker)
+        yield self.worker.startWorker()
+        self.wikipedia = self.worker.wikipedia
+        returnValue(self.worker)
 
     def mkmsg_in(self, content):
         return TransportUserMessage(
@@ -232,7 +249,7 @@ class WikipediaWorkerTestCase(TestCase, FakeHTTPTestCaseMixin):
                          self.worker.make_options(['foo', 'bar']))
 
     @inlineCallbacks
-    def test_happy_flow(self):
+    def test_happy_flow_wikitext(self):
         yield self.dispatch(self.mkmsg_in(None))
         self.assertEqual('What would you like to search Wikipedia for?',
                          self.get_dispatched_messages()[-1]['content'])
@@ -282,6 +299,59 @@ class WikipediaWorkerTestCase(TestCase, FakeHTTPTestCaseMixin):
             u'asserted that it stems from the [[Berber language|Berber]] word '
             u'\'\'ifri\'\' or \'\'ifran\'\' meaning "cave" and "caves", in '
             u'reference to cave dweller')
+        self.assertEqual(
+            "%s...\n(Full content sent by SMS.)" % (content[:100],),
+            self.get_dispatched_messages()[-2]['content'])
+        self.assertEqual(content[:250],
+                         self.get_dispatched_messages()[-1]['content'])
+
+    @inlineCallbacks
+    def test_happy_flow_text(self):
+        self.worker.content_type = 'text'
+        yield self.dispatch(self.mkmsg_in(None))
+        self.assertEqual('What would you like to search Wikipedia for?',
+                         self.get_dispatched_messages()[-1]['content'])
+
+        yield self.dispatch(self.mkmsg_in('africa'))
+        self.assertEqual('\n'.join([
+                    u'1. Africa',
+                    u'2. .africa',
+                    u'3. African American',
+                    u'4. North Africa',
+                    u'5. Kenya',
+                    u'6. Sub-Saharan Africa',
+                    u'7. Africa (Roman province)',
+                    u'8. African people',
+                    ]),
+                         self.get_dispatched_messages()[-1]['content'])
+
+        yield self.dispatch(self.mkmsg_in('1'))
+        self.assertEqual('\n'.join([
+                    u'1. Africa',
+                    u'2. Etymology',
+                    u'3. History',
+                    u'4. Geography',
+                    u'5. Biodiversity',
+                    u'6. Politics',
+                    u'7. Economy',
+                    u'8. Demographics',
+                    u'9. Languages',
+                    u'10. Culture',
+                    u'11. Religion',
+                    ]),
+                         self.get_dispatched_messages()[-1]['content'])
+
+        yield self.dispatch(self.mkmsg_in('2'))
+        content = (
+            u'Etymology\nAfri was a Latin name used to refer to the '
+            u'Carthaginians who dwelt in North Africa in modern-day Tunisia. '
+            u'Their name is usually connected with Phoenician afar, "dust", '
+            u'but a 1981 hypothesis[1] has asserted that it stems from the '
+            u'Berber word ifri or ifran meaning "cave" and "caves", in '
+            u'reference to cave dwellers.[2] Africa or Ifri or Afer[2] is the '
+            u'name of Banu Ifran from Algeria and Tripolitania (Berber Tribe '
+            u'of Yafran).[3]\nUnder Roman rule, Carthage became the capital '
+            u'of Africa Provin')
         self.assertEqual(
             "%s...\n(Full content sent by SMS.)" % (content[:100],),
             self.get_dispatched_messages()[-2]['content'])
