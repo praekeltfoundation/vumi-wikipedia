@@ -105,17 +105,17 @@ class WikipediaAPITestCase(TestCase, FakeHTTPTestCaseMixin):
     def test_get_sections_success(self):
         yield self.assert_api_result(
             self.wikipedia.get_sections('Triassic'), [
-                u'Dating and subdivisions',
-                u'Paleogeography',
-                u'Climate',
-                u'Life',
-                u'Coal',
-                u'Lagerst\xe4tten',
-                u'Late Triassic extinction event',
-                u'See also',
-                u'Notes',
-                u'References',
-                u'External links',
+                (u'Dating and subdivisions', u'1'),
+                (u'Paleogeography', u'2'),
+                (u'Climate', u'4'),
+                (u'Life', u'5'),
+                (u'Coal', u'9'),
+                (u'Lagerst\xe4tten', u'10'),
+                (u'Late Triassic extinction event', u'11'),
+                (u'See also', u'12'),
+                (u'Notes', u'13'),
+                (u'References', u'14'),
+                (u'External links', u'15'),
                 ])
 
     @inlineCallbacks
@@ -228,7 +228,7 @@ class WikipediaWorkerTestCase(TestCase, FakeHTTPTestCaseMixin):
         return self.broker.get_messages('vumi', self.rkey('outbound'))
 
     def test_make_options(self):
-        self.assertEqual((['foo', 'bar'], "1. foo\n2. bar"),
+        self.assertEqual((2, "1. foo\n2. bar"),
                          self.worker.make_options(['foo', 'bar']))
 
     @inlineCallbacks
@@ -263,11 +263,6 @@ class WikipediaWorkerTestCase(TestCase, FakeHTTPTestCaseMixin):
                     u'9. Languages',
                     u'10. Culture',
                     u'11. Religion',
-                    # u'12. Territories and regions',
-                    # u'13. See also',
-                    # u'14. References',
-                    # u'15. Further reading',
-                    # u'16. External links',
                     ]),
                          self.get_dispatched_messages()[-1]['content'])
 

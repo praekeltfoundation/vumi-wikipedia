@@ -90,7 +90,8 @@ class WikipediaAPI(object):
                 'redirects': '1',
                 })
 
-        sections = [sec['line'] for sec in response['parse']['sections']
+        sections = [(sec['line'], sec['index'])
+                    for sec in response['parse']['sections']
                     if sec['toclevel'] == 1]
         returnValue(sections)
 
@@ -166,7 +167,7 @@ class WikipediaWorker(ApplicationWorker):
             options = options[:-1]
             joined = mkmenu(options, prefix, start)
 
-        return options, joined[:self.MAX_CONTENT_LENGTH]
+        return len(options), joined[:self.MAX_CONTENT_LENGTH]
 
     @inlineCallbacks
     def consume_user_message(self, msg):
@@ -196,8 +197,8 @@ class WikipediaWorker(ApplicationWorker):
 
         results = yield self.wikipedia.search(query)
         if results:
-            results, msgcontent = self.make_options(results)
-            session['results'] = json.dumps(results)
+            count, msgcontent = self.make_options(results)
+            session['results'] = json.dumps(results[:count])
             self.reply_to(msg, msgcontent, True)
             session['state'] = 'sections'
         else:
@@ -228,22 +229,23 @@ class WikipediaWorker(ApplicationWorker):
 
         session['page'] = json.dumps(selection)
         results = yield self.wikipedia.get_sections(selection)
-        results = [selection] + results
-        results, msgcontent = self.make_options(results)
-        session['results'] = json.dumps(results)
+        results = [(selection, "0")] + results
+        count, msgcontent = self.make_options([r[0] for r in results])
+        session['results'] = json.dumps(results[:count])
         self.reply_to(msg, msgcontent, True)
         session['state'] = 'content'
         returnValue(session)
 
     @inlineCallbacks
     def process_message_content(self, msg, session):
-        selection = self.select_option(json.loads(session['results']), msg)
+        sections = json.loads(session['results'])
+        selection = self.select_option(sections, msg)
         if not selection:
             session['state'] = None
             returnValue(session)
         page = json.loads(session['page'])
         content = yield self.wikipedia.get_content(
-            page, int(msg['content'].strip()) - 1)
+            page, sections[int(msg['content'].strip()) - 1][1])
         ussd_cont = "%s...\n(Full content sent by SMS.)" % (content[:100],)
         self.reply_to(msg, ussd_cont, False)
         if self.sms_transport:
