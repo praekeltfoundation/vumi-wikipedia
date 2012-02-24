@@ -106,7 +106,6 @@ class WikipediaAPI(object):
         section_number : int
             The section number to retrieve.
         """
-        print type(page_name), repr(page_name)
         response = yield self._make_call({
                 'action': 'parse',
                 'page': page_name.encode('utf-8'),
