@@ -118,22 +118,20 @@ class WikipediaAPI(object):
         returnValue(text[:length_limit])
 
 
-def format_options(options, start=1):
-    """
-    Turn a list of results into an enumerate multiple choice list
-    """
-    return '\n'.join(['%s. %s' % (idx, opt)
-                      for idx, opt in enumerate(options, start)])
-
-
 class WikipediaUSSDFlow(object):
     def __init__(self, worker, session):
         self.session = session
 
 
+def mkmenu(options, prefix, start=1):
+    return prefix + '\n'.join(
+        ['%s. %s' % (idx, opt) for idx, opt in enumerate(options, start)])
+
+
 class WikipediaWorker(ApplicationWorker):
 
     MAX_SESSION_LENGTH = 3 * 60
+    MAX_CONTENT_LENGTH = 160
 
     @inlineCallbacks
     def startWorker(self):
@@ -156,6 +154,19 @@ class WikipediaWorker(ApplicationWorker):
     def stopWorker(self):
         yield self.session_manager.stop()
         yield super(WikipediaWorker, self).stopWorker()
+
+    def make_options(self, options, prefix='', start=1):
+        """
+        Turn a list of results into an enumerated multiple choice list
+        """
+        joined = mkmenu(options, prefix, start)
+        while len(joined) > self.MAX_CONTENT_LENGTH:
+            if not options:
+                break
+            options = options[:-1]
+            joined = mkmenu(options, prefix, start)
+
+        return options, joined[:self.MAX_CONTENT_LENGTH]
 
     @inlineCallbacks
     def consume_user_message(self, msg):
@@ -185,8 +196,9 @@ class WikipediaWorker(ApplicationWorker):
 
         results = yield self.wikipedia.search(query)
         if results:
+            results, msgcontent = self.make_options(results)
             session['results'] = json.dumps(results)
-            self.reply_to(msg, format_options(results), True)
+            self.reply_to(msg, msgcontent, True)
             session['state'] = 'sections'
         else:
             self.reply_to(msg, 'Sorry, no Wikipedia results for %s' % query,
@@ -217,8 +229,9 @@ class WikipediaWorker(ApplicationWorker):
         session['page'] = selection
         results = yield self.wikipedia.get_sections(selection)
         results = [selection] + results
+        results, msgcontent = self.make_options(results)
         session['results'] = json.dumps(results)
-        self.reply_to(msg, format_options(results), True)
+        self.reply_to(msg, msgcontent, True)
         session['state'] = 'content'
         returnValue(session)
 

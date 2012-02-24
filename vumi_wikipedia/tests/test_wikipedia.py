@@ -226,6 +226,10 @@ class WikipediaWorkerTestCase(TestCase, FakeHTTPTestCaseMixin):
     def get_dispatched_messages(self):
         return self.broker.get_messages('vumi', self.rkey('outbound'))
 
+    def test_make_options(self):
+        self.assertEqual((['foo', 'bar'], "1. foo\n2. bar"),
+                         self.worker.make_options(['foo', 'bar']))
+
     @inlineCallbacks
     def test_happy_flow(self):
         yield self.dispatch(self.mkmsg_in(None))
@@ -242,7 +246,6 @@ class WikipediaWorkerTestCase(TestCase, FakeHTTPTestCaseMixin):
                     u'6. Sub-Saharan Africa',
                     u'7. Africa (Roman province)',
                     u'8. African people',
-                    u'9. Confederation of African Football',
                     ]),
                          self.get_dispatched_messages()[-1]['content'])
 
@@ -259,11 +262,11 @@ class WikipediaWorkerTestCase(TestCase, FakeHTTPTestCaseMixin):
                     u'9. Languages',
                     u'10. Culture',
                     u'11. Religion',
-                    u'12. Territories and regions',
-                    u'13. See also',
-                    u'14. References',
-                    u'15. Further reading',
-                    u'16. External links',
+                    # u'12. Territories and regions',
+                    # u'13. See also',
+                    # u'14. References',
+                    # u'15. Further reading',
+                    # u'16. External links',
                     ]),
                          self.get_dispatched_messages()[-1]['content'])
 
