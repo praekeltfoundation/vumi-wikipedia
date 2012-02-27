@@ -57,6 +57,7 @@ def strip_html(text):
             'thumbcaption',  # Caption text for thumbnail images.
             'editsection',  # Caption text for thumbnail images.
             'reference',  # Superscript reference pointer.
+            'metadata',  # Various things related to status, not content.
             ])
 
     HEADING_TAGS = set(['h1', 'h2', 'h3', 'h4', 'h5', 'h6'])
@@ -65,8 +66,9 @@ def strip_html(text):
     def parse_tag(tag):
         output = []
 
-        if tag.get('class', None) in CSS_CLASSES_TO_IGNORE:
-            return []
+        for tag_class in tag.get('class', '').split():
+            if tag_class in CSS_CLASSES_TO_IGNORE:
+                return []
 
         for child in tag.contents:
             if isinstance(child, Comment):

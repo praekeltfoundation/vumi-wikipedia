@@ -33,5 +33,5 @@ class TextManglersTestCase(TestCase):
 
         assert_strip_html(u'a b c', u'<a>a</a>\nb c')
         assert_strip_html(u'ac', u'a<!-- b -->c')
-        assert_strip_html(u'c', u'<a class="reference"><p>a</p>b</a>c')
+        assert_strip_html(u'c', u'<a class="reference foo"><p>a</p>b</a>c')
         assert_strip_html(u'a b', u'a&#160;b')

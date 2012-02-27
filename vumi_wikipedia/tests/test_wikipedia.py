@@ -151,6 +151,21 @@ class WikipediaAPITestCase(TestCase, FakeHTTPTestCaseMixin):
             u"1907, Dominion Day, by proclamation of King Edward VII.")
 
     @inlineCallbacks
+    def test_get_content_html_strip_gumph(self):
+        yield self.assert_api_result(
+            self.wikipedia.get_content('Article', 0,
+                                       content_type='text'),
+            u'For the Wikipedia guidelines, see Wikipedia:What is an '
+            u'article?, Wikipedia:Good articles and Wikipedia:Featured '
+            u'articles. If you arrived here by clicking a link in sample '
+            u'code or a sample template, chances are the template has no '
+            u'connection with this article and the link was simply used as a '
+            u'stand-in for something else. Article may refer to:\nArticle '
+            u'(European Union), articles of treaties of the European Union '
+            u'Article (grammar), a grammatical element used to indicate '
+            u'definiteness or indefinitenes')
+
+    @inlineCallbacks
     def test_get_content_shorter(self):
         yield self.assert_api_result(
             self.wikipedia.get_content(
