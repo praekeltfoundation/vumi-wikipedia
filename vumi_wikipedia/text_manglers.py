@@ -1,10 +1,22 @@
 # -*- test-case-name: vumi_wikipedia.tests.test_text_manglers -*-
 
+import unicodedata
+
 
 def mangle_text(text, manglers=()):
     for mangler in manglers:
         text = mangler(text)
     return text
+
+
+def unicode_ord(name):
+    return ord(unicodedata.lookup(name))
+
+
+UNICODE_CONVERSION_MAPPING = {
+    unicode_ord('EN DASH'): u'-',
+    unicode_ord('EM DASH'): u'-',
+    }
 
 
 def convert_unicode(text):
@@ -16,12 +28,9 @@ def convert_unicode(text):
 
     NOTE: This does not strip out all non-ASCII characters. Just some of them.
     """
-    import unicodedata
 
     text = unicodedata.normalize('NFKC', text)
-    return text.translate({
-            0x2013: u'-',
-            })
+    return text.translate(UNICODE_CONVERSION_MAPPING)
 
 
 def normalize_whitespace(text):

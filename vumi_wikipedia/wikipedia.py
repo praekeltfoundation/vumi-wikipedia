@@ -140,6 +140,35 @@ def mkmenu(options, prefix, start=1):
 
 
 class WikipediaWorker(ApplicationWorker):
+    """Look up Wikipedia content over USSD, deliver over USSD/SMS.
+
+    Config parameters
+    -----------------
+
+    sms_transport : str, optional
+        If set, this specifies a different transport for sending SMS replies.
+        Otherwise the same transport will be used for both USSD and SMS.
+
+    override_sms_address : str, optional
+        If set, this overrides the `to_addr` for SMS replies. This is useful
+        for demos where a fake USSD transport is being used but real SMS
+        replies are desired.
+
+    api_url : str, optional
+        Alternate API URL to use. This can be any MediaWiki deployment,
+        although certain assumptions are made about the structure of articels
+        that may not be valid outside of Wikipedia.
+
+    accept_gzip : bool, optional
+        If `True`, the HTTP client will request gzipped responses. This is
+        generally beneficial, although it requires Twisted 11.1 or later.
+
+    content_type : str, optional
+        If set to `wikitext` (the default), raw WikiText content will be
+        returned. If set to `text`, HTML content will be processed into plain
+        text and returned. While the `text` content type is probably better,
+        the processing may not be sufficiently robust in the face of adversity.
+    """
 
     MAX_SESSION_LENGTH = 3 * 60
     MAX_CONTENT_LENGTH = 160
