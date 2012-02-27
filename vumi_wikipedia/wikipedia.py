@@ -10,6 +10,9 @@ from twisted.python import log
 from vumi.application import ApplicationWorker, SessionManager
 from vumi.utils import http_request_full, get_deploy_int
 
+from vumi_wikipedia.text_manglers import (
+    mangle_text, convert_unicode, normalize_whitespace, strip_html)
+
 
 def either(*args):
     for arg in args:
@@ -96,7 +99,8 @@ class WikipediaAPI(object):
         returnValue(sections)
 
     @inlineCallbacks
-    def get_content(self, page_name, section_number, length_limit=500):
+    def get_content(self, page_name, section_number, content_type='wikitext',
+                    length_limit=500):
         """
         Return the content of a section of a page.
 
@@ -110,13 +114,19 @@ class WikipediaAPI(object):
         response = yield self._make_call({
                 'action': 'parse',
                 'page': page_name.encode('utf-8'),
-                'prop': 'wikitext',
+                'prop': content_type,
                 'section': str(section_number),
                 'redirects': '1',
                 })
+        returnValue(self.parse_content(response['parse'][content_type]['*'],
+                                       content_type, length_limit))
 
-        text = response['parse']['wikitext']['*']
-        returnValue(text[:length_limit])
+    def parse_content(self, content, content_type, length_limit):
+        manglers = []
+        if content_type == 'text':
+            manglers.append(strip_html)
+        manglers.append(convert_unicode)
+        return mangle_text(content, manglers)[:length_limit]
 
 
 class WikipediaUSSDFlow(object):
@@ -130,9 +140,39 @@ def mkmenu(options, prefix, start=1):
 
 
 class WikipediaWorker(ApplicationWorker):
+    """Look up Wikipedia content over USSD, deliver over USSD/SMS.
+
+    Config parameters
+    -----------------
+
+    sms_transport : str, optional
+        If set, this specifies a different transport for sending SMS replies.
+        Otherwise the same transport will be used for both USSD and SMS.
+
+    override_sms_address : str, optional
+        If set, this overrides the `to_addr` for SMS replies. This is useful
+        for demos where a fake USSD transport is being used but real SMS
+        replies are desired.
+
+    api_url : str, optional
+        Alternate API URL to use. This can be any MediaWiki deployment,
+        although certain assumptions are made about the structure of articels
+        that may not be valid outside of Wikipedia.
+
+    accept_gzip : bool, optional
+        If `True`, the HTTP client will request gzipped responses. This is
+        generally beneficial, although it requires Twisted 11.1 or later.
+
+    content_type : str, optional
+        If set to `wikitext` (the default), raw WikiText content will be
+        returned. If set to `text`, HTML content will be processed into plain
+        text and returned. While the `text` content type is probably better,
+        the processing may not be sufficiently robust in the face of adversity.
+    """
 
     MAX_SESSION_LENGTH = 3 * 60
     MAX_CONTENT_LENGTH = 160
+    CONTENT_TYPE = 'wikitext'
 
     @inlineCallbacks
     def startWorker(self):
@@ -149,6 +189,7 @@ class WikipediaWorker(ApplicationWorker):
             self.config.get('api_url', None),
             self.config.get('accept_gzip', None))
 
+        self.content_type = self.config.get('content_type', self.CONTENT_TYPE)
         yield super(WikipediaWorker, self).startWorker()
 
     @inlineCallbacks
@@ -245,11 +286,14 @@ class WikipediaWorker(ApplicationWorker):
             returnValue(session)
         page = json.loads(session['page'])
         content = yield self.wikipedia.get_content(
-            page, sections[int(msg['content'].strip()) - 1][1])
+            page, sections[int(msg['content'].strip()) - 1][1],
+            content_type=self.content_type)
         ussd_cont = "%s...\n(Full content sent by SMS.)" % (content[:100],)
         self.reply_to(msg, ussd_cont, False)
         if self.sms_transport:
-            bmsg = msg.reply(content[:250])
+            sms_content = normalize_whitespace(content)[:250]
+            sms_content = content[:250]  # TODO: Decide if we want this.
+            bmsg = msg.reply(sms_content)
             bmsg['transport_name'] = self.sms_transport
             if self.override_sms_address:
                 bmsg['to_addr'] = self.override_sms_address
