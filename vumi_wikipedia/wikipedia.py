@@ -8,7 +8,7 @@ from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.python import log
 
 from vumi.application import ApplicationWorker, SessionManager
-from vumi.utils import http_request_full, get_deploy_int
+from vumi.utils import http_request_full
 
 from vumi_wikipedia.text_manglers import (
     mangle_text, convert_unicode, normalize_whitespace, strip_html)
@@ -179,8 +179,8 @@ class WikipediaWorker(ApplicationWorker):
         self.sms_transport = self.config.get('sms_transport', None)
         self.override_sms_address = self.config.get('override_sms_address',
                                                     None)
-        db = get_deploy_int(self._amqp_client.vhost)
-        self.r_server = redis.Redis("localhost", db=db)
+        self.r_config = self.config.get('redis_config', {})
+        self.r_server = redis.Redis(**self.r_config)
         self.session_manager = SessionManager(self.r_server,
             "%(worker_name)s:%(transport_name)s" % self.config,
             max_session_length=self.MAX_SESSION_LENGTH)
