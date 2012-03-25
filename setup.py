@@ -5,16 +5,9 @@ setup(
     version='dev',
     description='Vumi Wikipedia App',
     packages=find_packages(),
-    # package_data={'twisted.plugins': ['twisted/plugins/*.py']},
-    # include_package_data=True,
-
     install_requires=[
         'vumi > 0.3.1',
         'BeautifulSoup',
-    ],
-    dependency_links=[
-        # We need a newer Vumi than is on PyPI
-        'https://github.com/praekelt/vumi/zipball/develop#egg=vumi-0.4.0a',
     ],
 
     url='http://github.com/praekelt/vumi-wikipedia',
