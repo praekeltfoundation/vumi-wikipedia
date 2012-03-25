@@ -1,0 +1,7 @@
+Vumi Wikipedia App
+==================
+
+This is a vumi[1] app that provides access to Wikipedia over a combination of
+SMS and USSD.
+
+[1] http://vumi.org
