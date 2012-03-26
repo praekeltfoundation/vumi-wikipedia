@@ -11,6 +11,7 @@ setup(
     ],
 
     url='http://github.com/praekelt/vumi-wikipedia',
+    license='BSD',
     long_description=open('README', 'r').read(),
     maintainer='Praekelt Foundation',
     maintainer_email='dev@praekelt.com',
