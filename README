@@ -1,0 +1,19 @@
+Vumi Wikipedia App
+==================
+
+This is a vumi[1] app that provides access to Wikipedia over a combination of
+SMS and USSD.
+
+To install:
+
+    virtualenv --no-site-packages ve
+    source ./ve/bin/activate
+    pip install -r requirements.pip
+    pip install -e .
+
+
+NOTE: vumi 0.3.1 (the current stable release) is too old for this app, and the
+      dev branch in github has a problem with one of its deps. There are some
+      workarounds for this in the requirements.pip file.
+
+[1] http://vumi.org
