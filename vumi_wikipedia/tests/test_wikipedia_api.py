@@ -1,32 +1,34 @@
 import json
-import time
 from functools import wraps
 from pkg_resources import resource_stream
 
 from twisted.internet import reactor
-from twisted.internet.defer import inlineCallbacks, returnValue
+from twisted.internet.defer import inlineCallbacks
 from twisted.internet.protocol import Protocol, Factory
 from twisted.trial.unittest import TestCase
-from vumi_wikipedia.wikipedia_api import WikipediaAPI, ArticleExtract, section_marker
-import pprint
+from vumi_wikipedia.wikipedia_api import (WikipediaAPI, ArticleExtract,
+    section_marker)
+
 
 class ArticleExtractTestCase(TestCase):
     def test_one_section(self):
         ae = ArticleExtract(u'foo\nbar')
         self.assertEqual([u'foo\nbar'], ae.get_section_texts())
         self.assertEqual([], ae.get_section_titles())
-        self.assertEqual([{'title': None, 'level': None, 'text': u'foo\nbar'}], ae.sections)
+        self.assertEqual(
+            [{'title': None, 'level': None, 'text': u'foo\nbar'}], ae.sections)
         self.assertEqual([{'title': None, 'level': None, 'text': u'foo\nbar'}],
             ae.get_top_level_sections())
-    
+
     def test_multiple_sections(self):
-        ae = ArticleExtract(u'foo\n\n\n' + section_marker(2) + u' bar \nbaz\n' 
+        ae = ArticleExtract(u'foo\n\n\n' + section_marker(2) + u' bar \nbaz\n'
             + section_marker(2) + u'quux\n\n\nlol')
         self.assertEqual([u'foo', u'baz', u'lol'], ae.get_section_texts())
         self.assertEqual([u'bar', u'quux'], ae.get_section_titles())
-        
+
     def test_nested_sections(self):
-        ae = ArticleExtract(section_marker(2) + u'foo\n' + section_marker(3) + u' bar \ntext')
+        ae = ArticleExtract(section_marker(2) + u'foo\n'
+            + section_marker(3) + u' bar \ntext')
         self.assertEqual([u'', u'', u'text'], ae.get_section_texts())
         self.assertEqual([u'foo', u'bar'], ae.get_section_titles())
         self.assertEqual([{'level': None, 'text': u'', 'title': None},
@@ -37,7 +39,8 @@ class ArticleExtractTestCase(TestCase):
         ae = ArticleExtract(u'')
         self.assertEqual([u''], ae.get_section_texts())
         self.assertEqual([], ae.get_section_titles())
-        self.assertEqual([{'title': None, 'level': None, 'text': u''}], ae.sections)
+        self.assertEqual([{'title': None, 'level': None, 'text': u''}],
+            ae.sections)
 
 
 WIKIPEDIA_RESPONSES = json.load(
@@ -123,11 +126,11 @@ class WikipediaAPITestCase(TestCase, FakeHTTPTestCaseMixin):
     def test_search_no_results(self):
         yield self.assert_api_result(
             self.wikipedia.search('ncdkiuagdqpowebjkcs', limit=3), [])
-    
+
     @inlineCallbacks
     def test_get_extract(self):
-        yield self.wikipedia.get_extract('Cthulhu').addCallback(self.assert_extract)
-        
+        yield self.wikipedia.get_extract('Cthulhu').addCallback(
+            self.assert_extract)
+
     def assert_extract(self, extract):
         self.assertEqual(5, len(extract.sections))
-

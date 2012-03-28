@@ -3,11 +3,8 @@ from twisted.internet.defer import inlineCallbacks, returnValue
 import json
 from urllib import urlencode
 from vumi.utils import http_request_full
-from vumi_wikipedia.text_manglers import (
-    mangle_text, convert_unicode, normalize_whitespace, strip_html)
 import re
-import time
-import pprint
+
 
 def either(*args):
     for arg in args:
@@ -15,8 +12,10 @@ def either(*args):
             return arg
     return None
 
+
 def section_marker(title=u'(\\d)'):
     return u'\ufffd\ufffd' + unicode(title) + u'\ufffd\ufffd'
+
 
 class ArticleExtract(object):
     """
@@ -31,7 +30,8 @@ class ArticleExtract(object):
 
     def _init_from_string(self, string):
         splitter = re.compile(u'\ufffd\ufffd(?=\d)')
-        do_section = re.compile(u'^(\\d)\ufffd\ufffd\s*([^\n]+?)\s*(?:|\n+(.*))$', re.DOTALL)
+        do_section = re.compile(u'^(\\d)\ufffd\ufffd\s*([^\n]+?)'
+            u'\s*(?:|\n+(.*))$', re.DOTALL)
         self.sections = []
         for section in splitter.split(string):
             section = section.strip()
@@ -42,8 +42,9 @@ class ArticleExtract(object):
                 if text == None:
                     text = u''
             else:
-                title, text, level = ( None, section, None )
-            self.sections.append({'title': title, 'level': level, 'text': text})
+                title, text, level = (None, section, None)
+            self.sections.append(
+                {'title': title, 'level': level, 'text': text})
 
     def get_section_titles(self):
         return [section['title'] for section in self.sections[1:]]
@@ -60,7 +61,7 @@ class ArticleExtract(object):
             if section['level'] != None:
                 level = min(level, section['level'])
         return result
-                
+
 
 class WikipediaAPI(object):
     """
@@ -135,6 +136,5 @@ class WikipediaAPI(object):
                 'titles': page_name.encode('utf-8'),
                 'redirects': '1',
                 })
-        id,page = response['query']['pages'].popitem()
+        id, page = response['query']['pages'].popitem()
         returnValue(ArticleExtract(page['extract']))
-

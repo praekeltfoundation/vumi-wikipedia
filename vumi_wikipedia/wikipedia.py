@@ -8,9 +8,8 @@ from vumi.application import ApplicationWorker, SessionManager
 
 from vumi_wikipedia.wikipedia_api import WikipediaAPI, ArticleExtract
 
-from vumi_wikipedia.text_manglers import (
-    mangle_text, convert_unicode, normalize_whitespace, strip_html)
-import pprint
+from vumi_wikipedia.text_manglers import normalize_whitespace
+
 
 class WikipediaUSSDFlow(object):
     def __init__(self, worker, session):
@@ -166,7 +165,7 @@ class WikipediaWorker(ApplicationWorker):
 
         session['page'] = json.dumps(selection)
         extract = yield self.get_extract(selection)
-        results = extract.get_section_titles() #@todo:
+        results = extract.get_section_titles()  # TODO:
         results = [selection] + results
         count, msgcontent = self.make_options([r for r in results])
         session['results'] = json.dumps(results[:count])

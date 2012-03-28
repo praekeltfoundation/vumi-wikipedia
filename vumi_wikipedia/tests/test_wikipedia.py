@@ -1,20 +1,16 @@
 """Tests for vumi.demos.wikipedia."""
 
-import json
-from functools import wraps
-from pkg_resources import resource_stream
-
-from twisted.internet import reactor
 from twisted.internet.defer import inlineCallbacks, returnValue
-from twisted.internet.protocol import Protocol, Factory
 from twisted.trial.unittest import TestCase
 
 from vumi.tests.fake_amqp import FakeAMQPBroker
 from vumi.tests.utils import get_stubbed_worker
 from vumi.message import TransportUserMessage
 
-from vumi_wikipedia.wikipedia import WikipediaAPI, WikipediaWorker
-from vumi_wikipedia.tests.test_wikipedia_api import FakeHTTPTestCaseMixin, WIKIPEDIA_RESPONSES, debug_api_call
+from vumi_wikipedia.wikipedia import WikipediaWorker
+from vumi_wikipedia.tests.test_wikipedia_api import (FakeHTTPTestCaseMixin,
+    WIKIPEDIA_RESPONSES)
+
 
 class WikipediaWorkerTestCase(TestCase, FakeHTTPTestCaseMixin):
     transport_name = 'sphex'
@@ -115,13 +111,13 @@ class WikipediaWorkerTestCase(TestCase, FakeHTTPTestCaseMixin):
 
         yield self.dispatch(self.mkmsg_in('2'))
         content = (
-            u'The first half of the principal manuscript told a very peculiar tale. '
-            u'It appears that on 1 March 1925, a thin, dark young man of neurotic and '
-            u'excited aspect had called upon Professor Angell bearing the singular clay '
-            u'bas-relief, which was then exceedingly damp and fresh.')
+            u'The first half of the principal manuscript told a very peculiar '
+            u'tale. It appears that on 1 March 1925, a thin, dark young man '
+            u'of neurotic and excited aspect had called upon Professor Angell '
+            u'bearing the singular clay bas-relief, which was then exceedingly'
+            u' damp and fresh.')
         self.assertEqual(
             "%s...\n(Full content sent by SMS.)" % (content[:100],),
             self.get_dispatched_messages()[-2]['content'])
         self.assertEqual(content[:250],
                          self.get_dispatched_messages()[-1]['content'])
-
