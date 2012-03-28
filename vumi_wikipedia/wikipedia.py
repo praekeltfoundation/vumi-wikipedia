@@ -6,7 +6,7 @@ from twisted.python import log
 
 from vumi.application import ApplicationWorker, SessionManager
 
-from vumi_wikipedia.wikipedia_api import WikipediaAPI
+from vumi_wikipedia.wikipedia_api import WikipediaAPI, ArticleExtract
 
 from vumi_wikipedia.text_manglers import (
     mangle_text, convert_unicode, normalize_whitespace, strip_html)
@@ -101,7 +101,7 @@ class WikipediaWorker(ApplicationWorker):
         if data == None:
             extract = yield self.wikipedia.get_extract(title)
             data = json.dumps(extract.sections)
-            self.r_server.setex(key, 3600, data)
+            self.r_server.setex(key, data, 3600)
         else:
             extract = ArticleExtract(json.loads(data))
         returnValue(extract)
@@ -167,8 +167,8 @@ class WikipediaWorker(ApplicationWorker):
         session['page'] = json.dumps(selection)
         extract = yield self.get_extract(selection)
         results = extract.get_section_titles() #@todo:
-        results = [(selection, "0")] + results
-        count, msgcontent = self.make_options([r[0] for r in results])
+        results = [selection] + results
+        count, msgcontent = self.make_options([r for r in results])
         session['results'] = json.dumps(results[:count])
         self.reply_to(msg, msgcontent, True)
         session['state'] = 'content'
@@ -183,10 +183,7 @@ class WikipediaWorker(ApplicationWorker):
             returnValue(session)
         page = json.loads(session['page'])
         extract = yield self.get_extract(page)
-        content = extract.sections[int(msg['content'].strip())]
-        #content = yield self.wikipedia.get_content(
-        #    page, sections[int(msg['content'].strip()) - 1][1],
-        #    content_type=self.content_type)
+        content = extract.sections[int(msg['content'].strip()) - 1]['text']
         ussd_cont = "%s...\n(Full content sent by SMS.)" % (content[:100],)
         self.reply_to(msg, ussd_cont, False)
         if self.sms_transport:

@@ -29,7 +29,6 @@ class ArticleExtractTestCase(TestCase):
         ae = ArticleExtract(section_marker(2) + u'foo\n' + section_marker(3) + u' bar \ntext')
         self.assertEqual([u'', u'', u'text'], ae.get_section_texts())
         self.assertEqual([u'foo', u'bar'], ae.get_section_titles())
-        #pprint.pprint(ae.sections)
         self.assertEqual([{'level': None, 'text': u'', 'title': None},
             {'level': 2, 'text': u'', 'title': u'foo'}
             ], ae.get_top_level_sections())

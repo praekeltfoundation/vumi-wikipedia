@@ -105,19 +105,20 @@ class WikipediaWorkerTestCase(TestCase, FakeHTTPTestCaseMixin):
 
         yield self.dispatch(self.mkmsg_in('1'))
         self.assertEqual('\n'.join([
-                    u'1. Z\xfcndapp',
-                    u'2. See also',
-                    u'3. References',
-                    u'4. External links',
+                    u'1. Cthulhu',
+                    u'2. History',
+                    u'3. Geography',
+                    u'4. Mountains of Madness',
+                    u'5. Lulz',
                     ]),
                          self.get_dispatched_messages()[-1]['content'])
 
         yield self.dispatch(self.mkmsg_in('2'))
         content = (
-            u"==See also==\n[[Image:Z\u00fcndappN\u00e4hmaschine2.jpg|thumb"
-            u"|A Z\u00fcndapp sewing machine]]\n*[[BMW motorcycles|BMW "
-            u"(motorcycles)]]\n*[[\u010cezeta]]\n*[[Heinkel]]\n*[[Maico]]\n"
-            u"*[[MZ Motorrad- und Zweiradwerk GmbH]]")
+            u'The first half of the principal manuscript told a very peculiar tale. '
+            u'It appears that on 1 March 1925, a thin, dark young man of neurotic and '
+            u'excited aspect had called upon Professor Angell bearing the singular clay '
+            u'bas-relief, which was then exceedingly damp and fresh.')
         self.assertEqual(
             "%s...\n(Full content sent by SMS.)" % (content[:100],),
             self.get_dispatched_messages()[-2]['content'])
