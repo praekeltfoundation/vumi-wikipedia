@@ -31,7 +31,7 @@ class ArticleExtract(object):
 
     def _init_from_string(self, string):
         splitter = re.compile(u'\ufffd\ufffd(?=\d)')
-        do_section = re.compile(u'^(\\d)\ufffd\ufffd\s*([^\n]*?)\s*(?:|\n+(.*))$', re.DOTALL)
+        do_section = re.compile(u'^(\\d)\ufffd\ufffd\s*([^\n]+?)\s*(?:|\n+(.*))$', re.DOTALL)
         self.sections = []
         for section in splitter.split(string):
             section = section.strip()
@@ -39,6 +39,8 @@ class ArticleExtract(object):
                 m = do_section.match(section)
                 level, title, text = m.groups()
                 level = int(level)
+                if text == None:
+                    text = u''
             else:
                 title, text, level = ( None, section, None )
             self.sections.append({'title': title, 'level': level, 'text': text})
@@ -53,9 +55,10 @@ class ArticleExtract(object):
         level = 10
         result = []
         for section in self.sections:
-            if section['title'] <= level or section['title'] == None:
+            if section['level'] == None or section['level'] <= level:
                 result.append(section)
-            level = min(level, section['title'])
+            if section['level'] != None:
+                level = min(level, section['level'])
         return result
                 
 
