@@ -1,7 +1,7 @@
 from twisted.trial.unittest import TestCase, SkipTest
 
 from vumi_wikipedia.text_manglers import (
-    mangle_text, convert_unicode, normalize_whitespace, strip_html)
+    mangle_text, convert_unicode, normalize_whitespace)
 
 
 class TextManglersTestCase(TestCase):
@@ -22,16 +22,3 @@ class TextManglersTestCase(TestCase):
 
     def test_normalize_whitespace(self):
         self.assertEqual(u'a b c', normalize_whitespace(u'\ta  b\n c\r'))
-
-    def test_strip_html(self):
-        try:
-            strip_html('')
-        except ImportError:
-            raise SkipTest("BeautifulSoup not installed.")
-
-        assert_strip_html = lambda e, h: self.assertEqual(e, strip_html(h))
-
-        assert_strip_html(u'a b c', u'<a>a</a>\nb c')
-        assert_strip_html(u'ac', u'a<!-- b -->c')
-        assert_strip_html(u'c', u'<a class="reference foo"><p>a</p>b</a>c')
-        assert_strip_html(u'a b', u'a&#160;b')
