@@ -110,14 +110,12 @@ class WikipediaWorkerTestCase(TestCase, FakeHTTPTestCaseMixin):
                          self.get_dispatched_messages()[-1]['content'])
 
         yield self.dispatch(self.mkmsg_in('2'))
-        content = (
-            u'The first half of the principal manuscript told a very peculiar '
-            u'tale. It appears that on 1 March 1925, a thin, dark young man '
-            u'of neurotic and excited aspect had called upon Professor Angell '
-            u'bearing the singular clay bas-relief, which was then exceedingly'
-            u' damp and fresh.')
         self.assertEqual(
-            "%s...\n(Full content sent by SMS.)" % (content[:100],),
+            u'The first half of the principal manuscript told a very peculiar '
+            u'tale. It appears that on 1 March 1925, a thin, dark young man of'
+            u'...\n(Full content sent by SMS.)',
             self.get_dispatched_messages()[-2]['content'])
-        self.assertEqual(content[:250],
-                         self.get_dispatched_messages()[-1]['content'])
+        self.assertEqual(u'The first half of the principal manuscript told a '
+            u'very peculiar tale. It appears that on 1 March 1925, a thin, '
+            u'dark young man of neurotic and excited aspect had...',
+            self.get_dispatched_messages()[-1]['content'])

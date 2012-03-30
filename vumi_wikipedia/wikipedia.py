@@ -8,7 +8,8 @@ from vumi.application import ApplicationWorker, SessionManager
 
 from vumi_wikipedia.wikipedia_api import WikipediaAPI, ArticleExtract
 
-from vumi_wikipedia.text_manglers import normalize_whitespace
+from vumi_wikipedia.text_manglers import (normalize_whitespace,
+    truncate_sms, truncate_sms_with_postfix)
 
 
 class WikipediaUSSDFlow(object):
@@ -183,11 +184,11 @@ class WikipediaWorker(ApplicationWorker):
         page = json.loads(session['page'])
         extract = yield self.get_extract(page)
         content = extract.sections[int(msg['content'].strip()) - 1]['text']
-        ussd_cont = "%s...\n(Full content sent by SMS.)" % (content[:100],)
+        ussd_cont = truncate_sms_with_postfix(content, '\n(Full content sent by SMS.)')
         self.reply_to(msg, ussd_cont, False)
         if self.sms_transport:
-            sms_content = normalize_whitespace(content)[:250]
-            sms_content = content[:250]  # TODO: Decide if we want this.
+            sms_content = normalize_whitespace(content)
+            sms_content = truncate_sms(sms_content)  # TODO: Decide if we want this.
             bmsg = msg.reply(sms_content)
             bmsg['transport_name'] = self.sms_transport
             if self.override_sms_address:
