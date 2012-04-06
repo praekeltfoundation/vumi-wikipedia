@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='vumi-wikipedia',
-    version='dev',
+    version='0.1a',
     description='Vumi Wikipedia App',
     packages=find_packages(),
     install_requires=[
