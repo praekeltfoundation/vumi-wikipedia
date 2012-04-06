@@ -7,7 +7,6 @@ setup(
     packages=find_packages(),
     install_requires=[
         'vumi > 0.3.1',
-        'BeautifulSoup',
     ],
 
     url='http://github.com/praekelt/vumi-wikipedia',
