@@ -6,13 +6,22 @@ from twisted.internet import reactor
 from twisted.internet.defer import inlineCallbacks
 from twisted.internet.protocol import Protocol, Factory
 from twisted.trial.unittest import TestCase
-from vumi_wikipedia.wikipedia_api import (WikipediaAPI, ArticleExtract,
-    section_marker)
+
+from vumi_wikipedia.wikipedia_api import WikipediaAPI, ArticleExtract
+
+
+class SectionMarkerCreator(object):
+    def __getitem__(self, key):
+        return u'\ufffd\ufffd%s\ufffd\ufffd' % (key,)
+
+
+def make_extract(text):
+    return ArticleExtract(text % SectionMarkerCreator())
 
 
 class ArticleExtractTestCase(TestCase):
     def test_one_section(self):
-        ae = ArticleExtract(u'foo\nbar')
+        ae = make_extract(u'foo\nbar')
         self.assertEqual([u'foo\nbar'], ae.get_section_texts())
         self.assertEqual([], ae.get_section_titles())
         self.assertEqual(
@@ -21,14 +30,12 @@ class ArticleExtractTestCase(TestCase):
             ae.get_top_level_sections())
 
     def test_multiple_sections(self):
-        ae = ArticleExtract(u'foo\n\n\n' + section_marker(2) + u' bar \nbaz\n'
-            + section_marker(2) + u'quux\n\n\nlol')
+        ae = make_extract(u'foo\n\n\n%(2)s bar \nbaz\n%(2)squux\n\n\nlol')
         self.assertEqual([u'foo', u'baz', u'lol'], ae.get_section_texts())
         self.assertEqual([u'bar', u'quux'], ae.get_section_titles())
 
     def test_nested_sections(self):
-        ae = ArticleExtract(section_marker(2) + u'foo\n'
-            + section_marker(3) + u' bar \ntext')
+        ae = make_extract(u'%(2)sfoo\n%(3)s bar \ntext')
         self.assertEqual([u'', u'', u'text'], ae.get_section_texts())
         self.assertEqual([u'foo', u'bar'], ae.get_section_titles())
         self.assertEqual([{'level': None, 'text': u'', 'title': None},

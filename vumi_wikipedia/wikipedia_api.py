@@ -1,9 +1,12 @@
 # -*- test-case-name: vumi_wikipedia.tests.test_wikipedia_api -*-
-from twisted.internet.defer import inlineCallbacks, returnValue
+
+import re
 import json
 from urllib import urlencode
+
+from twisted.internet.defer import inlineCallbacks, returnValue
+
 from vumi.utils import http_request_full
-import re
 
 
 def either(*args):
@@ -13,8 +16,9 @@ def either(*args):
     return None
 
 
-def section_marker(title=u'(\\d)'):
-    return u'\ufffd\ufffd' + unicode(title) + u'\ufffd\ufffd'
+ARTICLE_SPLITTER = re.compile(u'\ufffd\ufffd(?=\\d)')
+ARTICLE_SECTION = re.compile(
+    u'^(\\d)\ufffd\ufffd\\s*([^\\n]+?)\\s*(?:|\\n+(.*))$', re.DOTALL)
 
 
 class ArticleExtract(object):
@@ -29,14 +33,11 @@ class ArticleExtract(object):
             self.sections = data
 
     def _init_from_string(self, string):
-        splitter = re.compile(u'\ufffd\ufffd(?=\d)')
-        do_section = re.compile(u'^(\\d)\ufffd\ufffd\s*([^\n]+?)'
-            u'\s*(?:|\n+(.*))$', re.DOTALL)
         self.sections = []
-        for section in splitter.split(string):
+        for section in ARTICLE_SPLITTER.split(string):
             section = section.strip()
             if len(self.sections) > 0:
-                m = do_section.match(section)
+                m = ARTICLE_SECTION.match(section)
                 level, title, text = m.groups()
                 level = int(level)
                 if text == None:
@@ -56,9 +57,9 @@ class ArticleExtract(object):
         level = 10
         result = []
         for section in self.sections:
-            if section['level'] == None or section['level'] <= level:
+            if section['level'] is None or section['level'] <= level:
                 result.append(section)
-            if section['level'] != None:
+            if section['level'] is not None:
                 level = min(level, section['level'])
         return result
 
@@ -66,6 +67,9 @@ class ArticleExtract(object):
 class WikipediaAPI(object):
     """
     Small Wikipedia API client library.
+
+    :param str url: URL of the API to query. (Defaults to Wikipedia's API.)
+    :param bool gzip: `True` to ask for gzip encoding, `False` otherwise.
     """
 
     URL = 'http://en.wikipedia.org/w/api.php'
@@ -102,12 +106,10 @@ class WikipediaAPI(object):
         """
         Perform a query and returns a list of results matching the query.
 
-        Parameters
-        ----------
-        query : unicode
-            The search term.
-        limit : int, optional
-            How many results to get back, defaults to 9.
+        :param unicode query: Search terms.
+        :param int limit: Maximum number of results to return. (Default 9)
+
+        :returns: `list` of article titles matching search terms.
         """
         response = yield self._make_call({
                 'action': 'query',
@@ -123,10 +125,9 @@ class WikipediaAPI(object):
         """
         Return the content of a section of a page.
 
-        Parameters
-        ----------
-        page_name : unicode
-            The name of the page to query.
+        :param unicode page_name: The name of the page to query.
+
+        :returns: :class:`ArticleExtract` containing the article data.
         """
         response = yield self._make_call({
                 'action': 'query',

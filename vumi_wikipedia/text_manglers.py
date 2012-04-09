@@ -1,9 +1,7 @@
 # -*- test-case-name: vumi_wikipedia.tests.test_text_manglers -*-
 
-import sys
 import unicodedata
 import re
-import pprint
 
 
 def mangle_text(text, manglers=()):
@@ -48,6 +46,7 @@ UNICODE_REGEX = re.compile(u'[\u0080-\uffff]')
 def is_unicode(string):
     return UNICODE_REGEX.search(string) != None
 
+
 def truncate_sms(string, ascii_limit=160, unicode_limit=70, ellipsis=u'...'):
     """Smart string truncation
     """
@@ -59,6 +58,7 @@ def truncate_sms(string, ascii_limit=160, unicode_limit=70, ellipsis=u'...'):
                 return result + ellipsis
         result = longer_string
     return result
+
 
 def truncate_sms_with_postfix(string, postfix, ascii_limit=160,
     unicode_limit=70, ellipsis=u'...'):

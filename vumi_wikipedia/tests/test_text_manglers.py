@@ -1,5 +1,6 @@
-# coding=utf-8
-from twisted.trial.unittest import TestCase, SkipTest
+# -*- coding=utf-8 -*-
+
+from twisted.trial.unittest import TestCase
 
 from vumi_wikipedia.text_manglers import (mangle_text, convert_unicode,
     normalize_whitespace, is_unicode, truncate_sms, truncate_sms_with_postfix)

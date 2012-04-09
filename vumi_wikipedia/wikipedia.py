@@ -1,13 +1,13 @@
 # -*- test-case-name: vumi_wikipedia.tests.test_wikipedia -*-
+
 import json
 import redis
+
 from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.python import log
 
 from vumi.application import ApplicationWorker, SessionManager
-
 from vumi_wikipedia.wikipedia_api import WikipediaAPI, ArticleExtract
-
 from vumi_wikipedia.text_manglers import (normalize_whitespace,
     truncate_sms, truncate_sms_with_postfix)
 
