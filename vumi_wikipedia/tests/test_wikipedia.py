@@ -119,3 +119,26 @@ class WikipediaWorkerTestCase(TestCase, FakeHTTPTestCaseMixin):
             u'very peculiar tale. It appears that on 1 March 1925, a thin, '
             u'dark young man of neurotic and excited aspect had...',
             self.get_dispatched_messages()[-1]['content'])
+
+    @inlineCallbacks
+    def test_search_no_results(self):
+        yield self.dispatch(self.mkmsg_in(None))
+        self.assertEqual('What would you like to search Wikipedia for?',
+                         self.get_dispatched_messages()[-1]['content'])
+
+        yield self.dispatch(self.mkmsg_in('ncdkiuagdqpowebjkcs'))
+        self.assertEqual(
+            'Sorry, no Wikipedia results for ncdkiuagdqpowebjkcs',
+            self.get_dispatched_messages()[-1]['content'])
+
+    @inlineCallbacks
+    def test_search_error(self):
+        yield self.dispatch(self.mkmsg_in(None))
+        self.assertEqual('What would you like to search Wikipedia for?',
+                         self.get_dispatched_messages()[-1]['content'])
+
+        yield self.dispatch(self.mkmsg_in('.'))
+        self.assertEqual(
+            'Sorry, there was an error processing your request. Please try '
+            'again later.', self.get_dispatched_messages()[-1]['content'])
+        self.flushLoggedErrors()

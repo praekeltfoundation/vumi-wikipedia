@@ -7,7 +7,7 @@ from twisted.internet.defer import inlineCallbacks
 from twisted.internet.protocol import Protocol, Factory
 from twisted.trial.unittest import TestCase
 
-from vumi_wikipedia.wikipedia_api import WikipediaAPI, ArticleExtract
+from vumi_wikipedia.wikipedia_api import WikipediaAPI, ArticleExtract, APIError
 
 
 class SectionMarkerCreator(object):
@@ -129,14 +129,15 @@ class WikipediaAPITestCase(TestCase, FakeHTTPTestCaseMixin):
             self.wikipedia.search('vumi', limit=2),
             [u'Arambagh Utsab', u'Vulpia microstachys'])
 
-    @inlineCallbacks
-    def test_search_no_results(self):
-        yield self.assert_api_result(
-            self.wikipedia.search('ncdkiuagdqpowebjkcs', limit=3), [])
+    def test_search_error(self):
+        return self.assertFailure(self.wikipedia.search('.'), APIError)
 
-    @inlineCallbacks
+    def test_search_no_results(self):
+        return self.assert_api_result(
+            self.wikipedia.search('ncdkiuagdqpowebjkcs'), [])
+
     def test_get_extract(self):
-        yield self.wikipedia.get_extract('Cthulhu').addCallback(
+        return self.wikipedia.get_extract('Cthulhu').addCallback(
             self.assert_extract)
 
     def assert_extract(self, extract):

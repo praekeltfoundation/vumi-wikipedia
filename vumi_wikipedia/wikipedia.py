@@ -116,15 +116,22 @@ class WikipediaWorker(ApplicationWorker):
             session['state'] = 'new'
 
         pfunc = getattr(self, 'process_message_%s' % (session['state'],))
-        session = yield pfunc(msg, session)
-        if session['state'] is not None:
-            self.session_manager.save_session(user_id, session)
-        else:
+        try:
+            session = yield pfunc(msg, session)
+            if session['state'] is not None:
+                self.session_manager.save_session(user_id, session)
+            else:
+                self.session_manager.clear_session(user_id)
+        except:
+            log.err()
+            self.reply_to(
+                msg, 'Sorry, there was an error processing your request. '
+                'Please try again later.', False)
             self.session_manager.clear_session(user_id)
 
     def process_message_new(self, msg, session):
-        self.reply_to(msg, "What would you like to search Wikipedia for?",
-            True)
+        self.reply_to(
+            msg, "What would you like to search Wikipedia for?", True)
         session['state'] = 'searching'
         return session
 
@@ -139,8 +146,8 @@ class WikipediaWorker(ApplicationWorker):
             self.reply_to(msg, msgcontent, True)
             session['state'] = 'sections'
         else:
-            self.reply_to(msg, 'Sorry, no Wikipedia results for %s' % query,
-                          False)
+            self.reply_to(
+                msg, 'Sorry, no Wikipedia results for %s' % query, False)
             session['state'] = None
         returnValue(session)
 
@@ -184,11 +191,13 @@ class WikipediaWorker(ApplicationWorker):
         page = json.loads(session['page'])
         extract = yield self.get_extract(page)
         content = extract.sections[int(msg['content'].strip()) - 1]['text']
-        ussd_cont = truncate_sms_with_postfix(content, '\n(Full content sent by SMS.)')
+        ussd_cont = truncate_sms_with_postfix(
+            content, '\n(Full content sent by SMS.)')
         self.reply_to(msg, ussd_cont, False)
         if self.sms_transport:
             sms_content = normalize_whitespace(content)
-            sms_content = truncate_sms(sms_content)  # TODO: Decide if we want this.
+            # TODO: Decide if we want this.
+            sms_content = truncate_sms(sms_content)
             bmsg = msg.reply(sms_content)
             bmsg['transport_name'] = self.sms_transport
             if self.override_sms_address:
