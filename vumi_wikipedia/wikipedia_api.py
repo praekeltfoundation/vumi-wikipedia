@@ -21,6 +21,12 @@ ARTICLE_SECTION = re.compile(
     u'^(\\d)\ufffd\ufffd\\s*([^\\n]+?)\\s*(?:|\\n+(.*))$', re.DOTALL)
 
 
+class APIError(Exception):
+    """
+    Exception thrown by Wikipedia API.
+    """
+
+
 class ArticleExtract(object):
     """
     Class representing an article extract
@@ -117,7 +123,10 @@ class WikipediaAPI(object):
                 'srsearch': query.encode('utf-8'),
                 'srlimit': str(limit),
                 })
-        results = [r['title'] for r in response['query']['search']]
+        if 'query' not in response:
+            raise APIError(response)
+        results = [r['title']
+                   for r in response['query'].get('search', {})]
         returnValue(results)
 
     @inlineCallbacks
@@ -137,5 +146,7 @@ class WikipediaAPI(object):
                 'titles': page_name.encode('utf-8'),
                 'redirects': '1',
                 })
-        id, page = response['query']['pages'].popitem()
+        if 'query' not in response:
+            raise APIError(response)
+        _id, page = response['query']['pages'].popitem()
         returnValue(ArticleExtract(page['extract']))
