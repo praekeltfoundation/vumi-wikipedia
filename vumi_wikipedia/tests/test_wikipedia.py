@@ -16,18 +16,28 @@ class WikipediaWorkerTestCase(ApplicationTestCase, FakeHTTPTestCaseMixin):
     def setUp(self):
         yield super(WikipediaWorkerTestCase, self).setUp()
         yield self.start_webserver(WIKIPEDIA_RESPONSES)
-        self.worker = yield self.get_application({
-                'transport_name': self.transport_name,
-                'worker_name': 'wikitest',
-                'sms_transport': 'sphex_sms',
-                'api_url': self.url,
-                })
+        self.worker = yield self.get_wikipedia_worker()
         self.wikipedia = self.worker.wikipedia
 
     @inlineCallbacks
     def tearDown(self):
         yield self.stop_webserver()
         yield super(WikipediaWorkerTestCase, self).tearDown()
+
+    def get_wikipedia_worker(self, config_override=None):
+        config = {
+            'transport_name': self.transport_name,
+            'worker_name': 'wikitest',
+            'sms_transport': 'sphex_sms',
+            'api_url': self.url,
+            }
+        if config_override is not None:
+            config.update(config_override)
+        return self.get_application(config)
+
+    def assert_config_knob(self, attr, orig, new):
+        self.assertEqual(orig, getattr(self.worker, attr))
+        self.assertEqual(new, getattr(self.knobbly_worker, attr))
 
     @inlineCallbacks
     def search_for_content(self, search, result=1, section=1):
@@ -101,3 +111,19 @@ class WikipediaWorkerTestCase(ApplicationTestCase, FakeHTTPTestCaseMixin):
             'Sorry, there was an error processing your request. Please try '
             'again later.', self.get_dispatched_messages()[-1]['content'])
         self.flushLoggedErrors()
+
+    @inlineCallbacks
+    def test_config_knobs(self):
+        self.knobbly_worker = yield self.get_wikipedia_worker({
+                'api_url': 'https://localhost:1337/',
+                'accept_gzip': True,
+                'user_agent': 'Bob Howard',
+                'max_ussd_session_length': 200,
+                'max_ussd_content_length': 180,
+                })
+
+        self.assert_config_knob('api_url', self.url, 'https://localhost:1337/')
+        self.assert_config_knob('accept_gzip', None, True)
+        self.assert_config_knob('user_agent', None, 'Bob Howard')
+        self.assert_config_knob('max_ussd_session_length', 180, 200)
+        self.assert_config_knob('max_ussd_content_length', 160, 180)

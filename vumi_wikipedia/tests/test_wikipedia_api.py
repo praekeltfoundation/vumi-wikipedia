@@ -65,7 +65,16 @@ class FakeHTTP(Protocol):
         headers, _, body = data.partition('\r\n\r\n')
         headers = headers.splitlines()
         request_line = headers.pop(0).rsplit(' ', 1)[0]
+        self.assert_user_agent(headers)
         return request_line, body
+
+    def assert_user_agent(self, headers):
+        expected_user_agent = getattr(
+            self.factory.testcase, 'expected_user_agent', None)
+        if expected_user_agent is not None:
+            [user_agent] = [h.split(': ', 1)[1] for h in headers
+                            if h.lower().startswith('user-agent')]
+            self.factory.testcase.assertEqual(expected_user_agent, user_agent)
 
     def build_response(self, response_data):
         lines = ["HTTP/1.1 %s" % (response_data['response_code'],)]
@@ -137,8 +146,16 @@ class WikipediaAPITestCase(TestCase, FakeHTTPTestCaseMixin):
             self.wikipedia.search('ncdkiuagdqpowebjkcs'), [])
 
     def test_get_extract(self):
-        return self.wikipedia.get_extract('Cthulhu').addCallback(
-            self.assert_extract)
+        def assert_extract(extract):
+            self.assertEqual(5, len(extract.sections))
 
-    def assert_extract(self, extract):
-        self.assertEqual(5, len(extract.sections))
+        return self.wikipedia.get_extract('Cthulhu').addCallback(
+            assert_extract)
+
+    @inlineCallbacks
+    def test_user_agent(self):
+        self.expected_user_agent = self.wikipedia.USER_AGENT
+        yield self.wikipedia.get_extract('Cthulhu')
+        self.wikipedia = WikipediaAPI(self.url, False, 'Bob Howard')
+        self.expected_user_agent = 'Bob Howard'
+        yield self.wikipedia.get_extract('Cthulhu')

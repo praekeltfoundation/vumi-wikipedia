@@ -46,10 +46,19 @@ class WikipediaWorker(ApplicationWorker):
     accept_gzip : bool, optional
         If `True`, the HTTP client will request gzipped responses. This is
         generally beneficial, although it requires Twisted 11.1 or later.
+
+    user_agent : str, optional
+        Override `User-Agent` header on API requests.
+
+    max_ussd_session_length : int, optional
+        Lifetime of USSD session in seconds. Defaults to 3 minutes.
+
+    max_ussd_content_length : int, optional
+        Maximum character length of USSD content. Defaults to 160.
     """
 
-    MAX_SESSION_LENGTH = 3 * 60
-    MAX_CONTENT_LENGTH = 160
+    MAX_USSD_SESSION_LENGTH = 3 * 60
+    MAX_USSD_CONTENT_LENGTH = 160
 
     def _opt_config(self, name):
         return self.config.get(name, None)
@@ -57,6 +66,13 @@ class WikipediaWorker(ApplicationWorker):
     def validate_config(self):
         self.sms_transport = self._opt_config('sms_transport')
         self.override_sms_address = self._opt_config('override_sms_address')
+        self.api_url = self._opt_config('api_url')
+        self.accept_gzip = self._opt_config('accept_gzip')
+        self.user_agent = self._opt_config('user_agent')
+        self.max_ussd_session_length = self.config.get(
+            'max_ussd_session_length', self.MAX_USSD_SESSION_LENGTH)
+        self.max_ussd_content_length = self.config.get(
+            'max_ussd_content_length', self.MAX_USSD_CONTENT_LENGTH)
 
     @inlineCallbacks
     def setup_application(self):
@@ -68,11 +84,10 @@ class WikipediaWorker(ApplicationWorker):
 
         self.session_manager = SessionManager(
             redis.sub_manager('session'),
-            max_session_length=self.MAX_SESSION_LENGTH)
+            max_session_length=self.max_ussd_session_length)
 
         self.wikipedia = WikipediaAPI(
-            self.config.get('api_url', None),
-            self.config.get('accept_gzip', None))
+            self.api_url, self.accept_gzip, self.user_agent)
 
     def teardown_application(self):
         return self.session_manager.stop()
@@ -83,13 +98,13 @@ class WikipediaWorker(ApplicationWorker):
         """
         joined = mkmenu(options, prefix,
          start)
-        while len(joined) > self.MAX_CONTENT_LENGTH:
+        while len(joined) > self.max_ussd_content_length:
             if not options:
                 break
             options = options[:-1]
             joined = mkmenu(options, prefix, start)
 
-        return len(options), joined[:self.MAX_CONTENT_LENGTH]
+        return len(options), joined[:self.max_ussd_content_length]
 
     @inlineCallbacks
     def get_extract(self, title):

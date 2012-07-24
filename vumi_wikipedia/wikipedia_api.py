@@ -46,7 +46,7 @@ class ArticleExtract(object):
                 m = ARTICLE_SECTION.match(section)
                 level, title, text = m.groups()
                 level = int(level)
-                if text == None:
+                if text is None:
                     text = u''
             else:
                 title, text, level = (None, section, None)
@@ -84,19 +84,20 @@ class WikipediaAPI(object):
     # network traffic. However, Twisted only supports this easily from 11.1.
     GZIP = False
 
+    USER_AGENT = 'Vumi HTTP Request'
+
     PRINT_DEBUG = False
 
-    def __init__(self, url=None, gzip=None):
+    def __init__(self, url=None, gzip=None, user_agent=None):
         self.url = either(url, self.URL)
         self.gzip = either(gzip, self.GZIP)
+        self.user_agent = either(user_agent, self.USER_AGENT)
 
     @inlineCallbacks
     def _make_call(self, params):
         params.setdefault('format', 'json')
         url = '%s?%s' % (self.url, urlencode(params))
-        headers = {
-            'User-Agent': 'Vumi HTTP Request',
-            }
+        headers = {'User-Agent': self.user_agent}
         if self.gzip:
             headers['Accept-Encoding'] = 'gzip'
         if self.PRINT_DEBUG:
