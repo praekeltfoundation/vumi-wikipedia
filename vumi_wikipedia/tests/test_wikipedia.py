@@ -119,11 +119,19 @@ class WikipediaWorkerTestCase(ApplicationTestCase, FakeHTTPTestCaseMixin):
                 'accept_gzip': True,
                 'user_agent': 'Bob Howard',
                 'max_ussd_session_length': 200,
+                'content_cache_time': 1800,
                 'max_ussd_content_length': 180,
+                'max_ussd_unicode_length': 80,
+                'max_sms_content_length': 300,
+                'max_sms_unicode_length': 130,
                 })
 
         self.assert_config_knob('api_url', self.url, 'https://localhost:1337/')
         self.assert_config_knob('accept_gzip', None, True)
         self.assert_config_knob('user_agent', None, 'Bob Howard')
         self.assert_config_knob('max_ussd_session_length', 180, 200)
+        self.assert_config_knob('content_cache_time', 3600, 1800)
         self.assert_config_knob('max_ussd_content_length', 160, 180)
+        self.assert_config_knob('max_ussd_unicode_length', 70, 80)
+        self.assert_config_knob('max_sms_content_length', 160, 300)
+        self.assert_config_knob('max_sms_unicode_length', 70, 130)

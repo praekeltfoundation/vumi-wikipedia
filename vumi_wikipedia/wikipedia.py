@@ -9,8 +9,8 @@ from vumi.persist.txredis_manager import TxRedisManager
 from vumi.components.session import SessionManager
 
 from vumi_wikipedia.wikipedia_api import WikipediaAPI, ArticleExtract
-from vumi_wikipedia.text_manglers import (normalize_whitespace,
-    truncate_sms, truncate_sms_with_postfix)
+from vumi_wikipedia.text_manglers import (
+    normalize_whitespace, truncate_sms, truncate_sms_with_postfix)
 
 
 class WikipediaUSSDFlow(object):
@@ -53,12 +53,29 @@ class WikipediaWorker(ApplicationWorker):
     max_ussd_session_length : int, optional
         Lifetime of USSD session in seconds. Defaults to 3 minutes.
 
+    content_cache_time : int, optional
+        Lifetime of cached article content in seconds. Defaults to 1 hour.
+
     max_ussd_content_length : int, optional
-        Maximum character length of USSD content. Defaults to 160.
+        Maximum character length of ASCII USSD content. Defaults to 160.
+
+    max_ussd_unicode_length : int, optional
+        Maximum character length of unicode USSD content. Defaults to 70.
+
+    max_sms_content_length : int, optional
+        Maximum character length of ASCII SMS content. Defaults to 160.
+
+    max_sms_unicode_length : int, optional
+        Maximum character length of unicode SMS content. Defaults to 70.
     """
 
     MAX_USSD_SESSION_LENGTH = 3 * 60
+    CONTENT_CACHE_TIME = 3600
+
     MAX_USSD_CONTENT_LENGTH = 160
+    MAX_USSD_UNICODE_LENGTH = 70
+    MAX_SMS_CONTENT_LENGTH = 160
+    MAX_SMS_UNICODE_LENGTH = 70
 
     def _opt_config(self, name):
         return self.config.get(name, None)
@@ -71,8 +88,16 @@ class WikipediaWorker(ApplicationWorker):
         self.user_agent = self._opt_config('user_agent')
         self.max_ussd_session_length = self.config.get(
             'max_ussd_session_length', self.MAX_USSD_SESSION_LENGTH)
+        self.content_cache_time = self.config.get(
+            'content_cache_time', self.CONTENT_CACHE_TIME)
         self.max_ussd_content_length = self.config.get(
             'max_ussd_content_length', self.MAX_USSD_CONTENT_LENGTH)
+        self.max_ussd_unicode_length = self.config.get(
+            'max_ussd_unicode_length', self.MAX_USSD_UNICODE_LENGTH)
+        self.max_sms_content_length = self.config.get(
+            'max_sms_content_length', self.MAX_SMS_CONTENT_LENGTH)
+        self.max_sms_unicode_length = self.config.get(
+            'max_sms_unicode_length', self.MAX_SMS_UNICODE_LENGTH)
 
     @inlineCallbacks
     def setup_application(self):
@@ -116,7 +141,7 @@ class WikipediaWorker(ApplicationWorker):
             # We do this in two steps because our redis clients disagree on
             # what SETEX should look like.
             yield self.extract_redis.set(key, data)
-            yield self.extract_redis.expire(key, 3600)
+            yield self.extract_redis.expire(key, self.content_cache_time)
         else:
             extract = ArticleExtract(json.loads(data))
         returnValue(extract)
@@ -207,12 +232,15 @@ class WikipediaWorker(ApplicationWorker):
         extract = yield self.get_extract(page)
         content = extract.sections[int(msg['content'].strip()) - 1]['text']
         ussd_cont = truncate_sms_with_postfix(
-            content, '\n(Full content sent by SMS.)')
+            content, '\n(Full content sent by SMS.)',
+            self.max_ussd_content_length, self.max_ussd_unicode_length)
         self.reply_to(msg, ussd_cont, False)
         if self.sms_transport:
             sms_content = normalize_whitespace(content)
             # TODO: Decide if we want this.
-            sms_content = truncate_sms(sms_content)
+            sms_content = truncate_sms(
+                sms_content,
+                self.max_sms_content_length, self.max_sms_unicode_length)
             bmsg = msg.reply(sms_content)
             bmsg['transport_name'] = self.sms_transport
             if self.override_sms_address:
