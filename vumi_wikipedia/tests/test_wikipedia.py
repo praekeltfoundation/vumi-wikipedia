@@ -1,75 +1,33 @@
 """Tests for vumi.demos.wikipedia."""
 
-from twisted.internet.defer import inlineCallbacks, returnValue
-from twisted.trial.unittest import TestCase
+from twisted.internet.defer import inlineCallbacks
 
-from vumi.tests.fake_amqp import FakeAMQPBroker
-from vumi.tests.utils import get_stubbed_worker
-from vumi.message import TransportUserMessage
+from vumi.application.tests.test_base import ApplicationTestCase
 
 from vumi_wikipedia.wikipedia import WikipediaWorker
-from vumi_wikipedia.tests.test_wikipedia_api import (FakeHTTPTestCaseMixin,
-    WIKIPEDIA_RESPONSES)
+from vumi_wikipedia.tests.test_wikipedia_api import (
+    FakeHTTPTestCaseMixin, WIKIPEDIA_RESPONSES)
 
 
-class WikipediaWorkerTestCase(TestCase, FakeHTTPTestCaseMixin):
-    transport_name = 'sphex'
-
-    timeout = 10
+class WikipediaWorkerTestCase(ApplicationTestCase, FakeHTTPTestCaseMixin):
+    application_class = WikipediaWorker
 
     @inlineCallbacks
     def setUp(self):
+        yield super(WikipediaWorkerTestCase, self).setUp()
         yield self.start_webserver(WIKIPEDIA_RESPONSES)
-        self.broker = FakeAMQPBroker()
-        self._workers = []
-        yield self.get_worker()
+        self.worker = yield self.get_application({
+                'transport_name': self.transport_name,
+                'worker_name': 'wikitest',
+                'sms_transport': 'sphex_sms',
+                'api_url': self.url,
+                })
+        self.wikipedia = self.worker.wikipedia
 
     @inlineCallbacks
     def tearDown(self):
-        for w in self._workers:
-            yield w.stopWorker()
         yield self.stop_webserver()
-
-    @inlineCallbacks
-    def get_worker(self, **config_extras):
-        if hasattr(self, 'worker'):
-            self._workers.remove(self.worker)
-            yield self.worker.stopWorker()
-        config = {
-            'transport_name': self.transport_name,
-            'worker_name': 'wikitest',
-            'sms_transport': 'sphex',
-            'api_url': self.url,
-            }
-        config.update(config_extras)
-        self.worker = get_stubbed_worker(WikipediaWorker, config, self.broker)
-        self._workers.append(self.worker)
-        yield self.worker.startWorker()
-        self.wikipedia = self.worker.wikipedia
-        returnValue(self.worker)
-
-    def mkmsg_in(self, content):
-        return TransportUserMessage(
-            from_addr='+41791234567',
-            to_addr='9292',
-            message_id='abc',
-            transport_name=self.transport_name,
-            transport_type='ussd',
-            transport_metadata={},
-            content=content,
-            )
-
-    def rkey(self, name):
-        return "%s.%s" % (self.transport_name, name)
-
-    def dispatch(self, message, rkey=None, exchange='vumi'):
-        if rkey is None:
-            rkey = self.rkey('inbound')
-        self.broker.publish_message(exchange, rkey, message)
-        return self.broker.kick_delivery()
-
-    def get_dispatched_messages(self):
-        return self.broker.get_messages('vumi', self.rkey('outbound'))
+        yield super(WikipediaWorkerTestCase, self).tearDown()
 
     @inlineCallbacks
     def search_for_content(self, search, result=1, section=1):
@@ -114,11 +72,12 @@ class WikipediaWorkerTestCase(TestCase, FakeHTTPTestCaseMixin):
             u'The first half of the principal manuscript told a very peculiar '
             u'tale. It appears that on 1 March 1925, a thin, dark young man of'
             u'...\n(Full content sent by SMS.)',
-            self.get_dispatched_messages()[-2]['content'])
+            self.get_dispatched_messages()[-1]['content'])
+        [sms_msg] = self._amqp.get_messages('vumi', 'sphex_sms.outbound')
         self.assertEqual(u'The first half of the principal manuscript told a '
             u'very peculiar tale. It appears that on 1 March 1925, a thin, '
             u'dark young man of neurotic and excited aspect had...',
-            self.get_dispatched_messages()[-1]['content'])
+            sms_msg['content'])
 
     @inlineCallbacks
     def test_search_no_results(self):

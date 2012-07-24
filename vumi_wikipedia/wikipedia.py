@@ -1,12 +1,13 @@
 # -*- test-case-name: vumi_wikipedia.tests.test_wikipedia -*-
 
 import json
-import redis
 
 from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.python import log
+from vumi.application import ApplicationWorker
+from vumi.persist.txredis_manager import TxRedisManager
+from vumi.components.session import SessionManager
 
-from vumi.application import ApplicationWorker, SessionManager
 from vumi_wikipedia.wikipedia_api import WikipediaAPI, ArticleExtract
 from vumi_wikipedia.text_manglers import (normalize_whitespace,
     truncate_sms, truncate_sms_with_postfix)
@@ -45,40 +46,36 @@ class WikipediaWorker(ApplicationWorker):
     accept_gzip : bool, optional
         If `True`, the HTTP client will request gzipped responses. This is
         generally beneficial, although it requires Twisted 11.1 or later.
-
-    content_type : str, optional
-        If set to `wikitext` (the default), raw WikiText content will be
-        returned. If set to `text`, HTML content will be processed into plain
-        text and returned. While the `text` content type is probably better,
-        the processing may not be sufficiently robust in the face of adversity.
     """
 
     MAX_SESSION_LENGTH = 3 * 60
     MAX_CONTENT_LENGTH = 160
-    CONTENT_TYPE = 'wikitext'
+
+    def _opt_config(self, name):
+        return self.config.get(name, None)
+
+    def validate_config(self):
+        self.sms_transport = self._opt_config('sms_transport')
+        self.override_sms_address = self._opt_config('override_sms_address')
 
     @inlineCallbacks
-    def startWorker(self):
-        self.sms_transport = self.config.get('sms_transport', None)
-        self.override_sms_address = self.config.get('override_sms_address',
-                                                    None)
-        self.r_config = self.config.get('redis_config', {})
-        self.r_server = redis.Redis(**self.r_config)
-        self.session_manager = SessionManager(self.r_server,
-            "%(worker_name)s:%(transport_name)s" % self.config,
+    def setup_application(self):
+        redis = yield TxRedisManager.from_config(
+            self.config.get('redis_manager', {}))
+        redis = redis.sub_manager(self.config['worker_name'])
+
+        self.extract_redis = redis.sub_manager('extracts')
+
+        self.session_manager = SessionManager(
+            redis.sub_manager('session'),
             max_session_length=self.MAX_SESSION_LENGTH)
 
         self.wikipedia = WikipediaAPI(
             self.config.get('api_url', None),
             self.config.get('accept_gzip', None))
 
-        self.content_type = self.config.get('content_type', self.CONTENT_TYPE)
-        yield super(WikipediaWorker, self).startWorker()
-
-    @inlineCallbacks
-    def stopWorker(self):
-        yield self.session_manager.stop()
-        yield super(WikipediaWorker, self).stopWorker()
+    def teardown_application(self):
+        return self.session_manager.stop()
 
     def make_options(self, options, prefix='', start=1):
         """
@@ -97,11 +94,14 @@ class WikipediaWorker(ApplicationWorker):
     @inlineCallbacks
     def get_extract(self, title):
         key = self.wikipedia.url + ':' + title
-        data = self.r_server.get(key)
-        if data == None:
+        data = yield self.extract_redis.get(key)
+        if data is None:
             extract = yield self.wikipedia.get_extract(title)
             data = json.dumps(extract.sections)
-            self.r_server.setex(key, data, 3600)
+            # We do this in two steps because our redis clients disagree on
+            # what SETEX should look like.
+            yield self.extract_redis.set(key, data)
+            yield self.extract_redis.expire(key, 3600)
         else:
             extract = ArticleExtract(json.loads(data))
         returnValue(extract)
@@ -110,24 +110,24 @@ class WikipediaWorker(ApplicationWorker):
     def consume_user_message(self, msg):
         log.msg("Received: %s" % (msg.payload,))
         user_id = msg.user()
-        session = self.session_manager.load_session(user_id)
+        session = yield self.session_manager.load_session(user_id)
         if (not session) or (msg['content'] is None):
-            session = self.session_manager.create_session(user_id)
+            session = yield self.session_manager.create_session(user_id)
             session['state'] = 'new'
 
         pfunc = getattr(self, 'process_message_%s' % (session['state'],))
         try:
             session = yield pfunc(msg, session)
             if session['state'] is not None:
-                self.session_manager.save_session(user_id, session)
+                yield self.session_manager.save_session(user_id, session)
             else:
-                self.session_manager.clear_session(user_id)
+                yield self.session_manager.clear_session(user_id)
         except:
             log.err()
             self.reply_to(
                 msg, 'Sorry, there was an error processing your request. '
                 'Please try again later.', False)
-            self.session_manager.clear_session(user_id)
+            yield self.session_manager.clear_session(user_id)
 
     def process_message_new(self, msg, session):
         self.reply_to(
