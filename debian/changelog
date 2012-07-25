@@ -1,5 +1,5 @@
-vumi-wikipedia (0.1~a+git2012040614-0~ppa1) lucid; urgency=low
+vumi-wikipedia (0.1~a+1-0~ppa3) precise; urgency=low
 
   * Initial release.
 
- -- Jeremy Thurgood <jeremy@praekelt.com>  Fri, 06 Apr 2012 00:31:29 +0000
+ -- Colin Alston <colin.alston@praekeltfoundation.org>  Wed, 25 Jul 2012 10:27:22 +0200
