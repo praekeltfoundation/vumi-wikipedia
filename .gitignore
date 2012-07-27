@@ -1,4 +1,4 @@
 *.pyc
 *.*~
 _trial_temp
-
+/dist/
