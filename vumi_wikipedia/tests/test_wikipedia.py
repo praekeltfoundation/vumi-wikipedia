@@ -74,13 +74,6 @@ class WikipediaWorkerTestCase(ApplicationTestCase, FakeHTTPTestCaseMixin):
         yield self.stop_webserver()
         yield super(WikipediaWorkerTestCase, self).tearDown()
 
-    @inlineCallbacks
-    def search_for_content(self, search, result=1, section=1):
-        yield self.dispatch(self.mkmsg_in(None))  # Start session.
-        yield self.dispatch(self.mkmsg_in(search))  # Search keyword.
-        yield self.dispatch(self.mkmsg_in(str(result)))  # Select result.
-        yield self.dispatch(self.mkmsg_in(str(section)))  # Select section.
-
     def test_make_options(self):
         self.assertEqual((2, "1. foo\n2. bar"),
                          self.worker.make_options(['foo', 'bar']))
