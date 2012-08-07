@@ -9,6 +9,34 @@ from vumi_wikipedia.tests.test_wikipedia_api import (
     FakeHTTPTestCaseMixin, WIKIPEDIA_RESPONSES)
 
 
+CTHULHU_RESULTS = '\n'.join([
+        u'1. Cthulhu',
+        u'2. Call of Cthulhu (role-playing game)',
+        u'3. Cthulhu (2007 film)',
+        u'4. Cthulhu (2000 film)',
+        u'5. Cthulhu Mythos',
+        u'6. The Call of Cthulhu',
+        ])
+
+CTHULHU_SECTIONS = '\n'.join([
+        u'1. Cthulhu',
+        u'2. History',
+        u'3. Geography',
+        u'4. Mountains of Madness',
+        u'5. Lulz',
+        ])
+
+CTHULHU_USSD = (
+    u'The first half of the principal manuscript told a very peculiar tale. '
+    u'It appears that on 1 March 1925, a thin, dark young man of...\n(Full '
+    u'content sent by SMS.)')
+
+CTHULHU_SMS = (
+    u'The first half of the principal manuscript told a very peculiar tale. '
+    u'It appears that on 1 March 1925, a thin, dark young man of neurotic '
+    u'and excited aspect had...')
+
+
 class WikipediaWorkerTestCase(ApplicationTestCase, FakeHTTPTestCaseMixin):
     application_class = WikipediaWorker
 
@@ -23,6 +51,23 @@ class WikipediaWorkerTestCase(ApplicationTestCase, FakeHTTPTestCaseMixin):
                 'api_url': self.url,
                 })
         self.wikipedia = self.worker.wikipedia
+
+    @inlineCallbacks
+    def replace_application(self, config):
+        # Replace our worker with a different one.
+        self._workers.remove(self.worker)
+        yield self.worker.stopWorker()
+        self.worker = yield self.get_application(config)
+
+    @inlineCallbacks
+    def assert_response(self, text, expected):
+        yield self.dispatch(self.mkmsg_in(text))
+        self.assertEqual(expected,
+                         self.get_dispatched_messages()[-1]['content'])
+
+    def start_session(self):
+        return self.assert_response(
+            None, 'What would you like to search Wikipedia for?')
 
     @inlineCallbacks
     def tearDown(self):
@@ -42,62 +87,83 @@ class WikipediaWorkerTestCase(ApplicationTestCase, FakeHTTPTestCaseMixin):
 
     @inlineCallbacks
     def test_happy_flow(self):
-        yield self.dispatch(self.mkmsg_in(None))
-        self.assertEqual('What would you like to search Wikipedia for?',
-                         self.get_dispatched_messages()[-1]['content'])
+        yield self.start_session()
+        yield self.assert_response('cthulhu', CTHULHU_RESULTS)
+        yield self.assert_response('1', CTHULHU_SECTIONS)
+        yield self.assert_response('2', CTHULHU_USSD)
 
-        yield self.dispatch(self.mkmsg_in('cthulhu'))
-        self.assertEqual('\n'.join([
-                    u'1. Cthulhu',
-                    u'2. Call of Cthulhu (role-playing game)',
-                    u'3. Cthulhu (2007 film)',
-                    u'4. Cthulhu (2000 film)',
-                    u'5. Cthulhu Mythos',
-                    u'6. The Call of Cthulhu',
-                    ]),
-                         self.get_dispatched_messages()[-1]['content'])
-
-        yield self.dispatch(self.mkmsg_in('1'))
-        self.assertEqual('\n'.join([
-                    u'1. Cthulhu',
-                    u'2. History',
-                    u'3. Geography',
-                    u'4. Mountains of Madness',
-                    u'5. Lulz',
-                    ]),
-                         self.get_dispatched_messages()[-1]['content'])
-
-        yield self.dispatch(self.mkmsg_in('2'))
-        self.assertEqual(
-            u'The first half of the principal manuscript told a very peculiar '
-            u'tale. It appears that on 1 March 1925, a thin, dark young man of'
-            u'...\n(Full content sent by SMS.)',
-            self.get_dispatched_messages()[-1]['content'])
         [sms_msg] = self._amqp.get_messages('vumi', 'sphex_sms.outbound')
-        self.assertEqual(u'The first half of the principal manuscript told a '
-            u'very peculiar tale. It appears that on 1 March 1925, a thin, '
-            u'dark young man of neurotic and excited aspect had...',
-            sms_msg['content'])
+        self.assertEqual(CTHULHU_SMS, sms_msg['content'])
+        self.assertEqual('+41791234567', sms_msg['to_addr'])
+
+    @inlineCallbacks
+    def test_no_sms_transport(self):
+        yield self.replace_application({
+                'transport_name': self.transport_name,
+                'worker_name': 'wikitest',
+                'api_url': self.url,
+                })
+
+        yield self.start_session()
+        yield self.assert_response('cthulhu', CTHULHU_RESULTS)
+        yield self.assert_response('1', CTHULHU_SECTIONS)
+        yield self.assert_response('2', CTHULHU_USSD)
+
+        self.assertEqual(
+            [], self._amqp.get_messages('vumi', 'sphex_sms.outbound'))
+
+    @inlineCallbacks
+    def test_sms_override(self):
+        yield self.replace_application({
+                'transport_name': self.transport_name,
+                'worker_name': 'wikitest',
+                'sms_transport': 'sphex_sms',
+                'api_url': self.url,
+                'override_sms_address': 'blah',
+                })
+
+        yield self.start_session()
+        yield self.assert_response('cthulhu', CTHULHU_RESULTS)
+        yield self.assert_response('1', CTHULHU_SECTIONS)
+        yield self.assert_response('2', CTHULHU_USSD)
+
+        [sms_msg] = self._amqp.get_messages('vumi', 'sphex_sms.outbound')
+        self.assertEqual(CTHULHU_SMS, sms_msg['content'])
+        self.assertEqual('blah', sms_msg['to_addr'])
+
+    @inlineCallbacks
+    def test_invalid_selection_not_digit(self):
+        yield self.start_session()
+        yield self.assert_response('cthulhu', CTHULHU_RESULTS)
+        yield self.assert_response(
+            'six', 'Sorry, invalid selection. Please restart and try again')
+
+    @inlineCallbacks
+    def test_invalid_selection_bad_index(self):
+        yield self.start_session()
+        yield self.assert_response('cthulhu', CTHULHU_RESULTS)
+        yield self.assert_response(
+            '8', 'Sorry, invalid selection. Please restart and try again')
+
+    @inlineCallbacks
+    def test_invalid_selection_later(self):
+        yield self.start_session()
+        yield self.assert_response('cthulhu', CTHULHU_RESULTS)
+        yield self.assert_response('1', CTHULHU_SECTIONS)
+        yield self.assert_response(
+            'Hastur', 'Sorry, invalid selection. Please restart and try again')
 
     @inlineCallbacks
     def test_search_no_results(self):
-        yield self.dispatch(self.mkmsg_in(None))
-        self.assertEqual('What would you like to search Wikipedia for?',
-                         self.get_dispatched_messages()[-1]['content'])
-
-        yield self.dispatch(self.mkmsg_in('ncdkiuagdqpowebjkcs'))
-        self.assertEqual(
-            'Sorry, no Wikipedia results for ncdkiuagdqpowebjkcs',
-            self.get_dispatched_messages()[-1]['content'])
+        yield self.start_session()
+        yield self.assert_response(
+            'ncdkiuagdqpowebjkcs',
+            'Sorry, no Wikipedia results for ncdkiuagdqpowebjkcs')
 
     @inlineCallbacks
     def test_search_error(self):
-        yield self.dispatch(self.mkmsg_in(None))
-        self.assertEqual('What would you like to search Wikipedia for?',
-                         self.get_dispatched_messages()[-1]['content'])
-
-        yield self.dispatch(self.mkmsg_in('.'))
-        self.assertEqual(
-            'Sorry, there was an error processing your request. Please try '
-            'again later.', self.get_dispatched_messages()[-1]['content'])
+        yield self.start_session()
+        yield self.assert_response(
+            '.', ('Sorry, there was an error processing your request. Please '
+                  'try ' 'again later.'))
         self.flushLoggedErrors()
