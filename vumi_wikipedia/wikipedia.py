@@ -7,6 +7,7 @@ from twisted.python import log
 from vumi.application import ApplicationWorker
 from vumi.persist.txredis_manager import TxRedisManager
 from vumi.components.session import SessionManager
+from vumi.message import TransportUserMessage
 
 from vumi_wikipedia.wikipedia_api import WikipediaAPI, ArticleExtract
 from vumi_wikipedia.text_manglers import (normalize_whitespace,
@@ -106,12 +107,38 @@ class WikipediaWorker(ApplicationWorker):
             extract = ArticleExtract(json.loads(data))
         returnValue(extract)
 
+    def _message_session_event(self, msg):
+        # First, check for session parameters on the message.
+        if msg['session_event'] == TransportUserMessage.SESSION_NEW:
+            return 'new'
+        elif msg['session_event'] == TransportUserMessage.SESSION_RESUME:
+            return 'resume'
+        elif msg['session_event'] == TransportUserMessage.SESSION_CLOSE:
+            return 'close'
+
+        # We don't have session data, so guess.
+        if msg['content'] is None:
+            return 'new'
+
+        return 'resume'
+
     @inlineCallbacks
     def consume_user_message(self, msg):
         log.msg("Received: %s" % (msg.payload,))
         user_id = msg.user()
+        session_event = self._message_session_event(msg)
+
+        if session_event == 'close':
+            # Session closed, so clean up and don't reply.
+            yield self.session_manager.clear_session(user_id)
+            return
+
         session = yield self.session_manager.load_session(user_id)
-        if (not session) or (msg['content'] is None):
+        if not session:
+            # We have no session data, so treat this as 'new' even if it isn't.
+            session_event = 'new'
+
+        if session_event == 'new':
             session = yield self.session_manager.create_session(user_id)
             session['state'] = 'new'
 
