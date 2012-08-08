@@ -122,6 +122,10 @@ class WikipediaWorker(ApplicationWorker):
 
         return 'resume'
 
+    def close_session(self, msg):
+        # We handle all of this in consume_user_message.
+        return self.consume_user_message(msg)
+
     @inlineCallbacks
     def consume_user_message(self, msg):
         log.msg("Received: %s" % (msg.payload,))
