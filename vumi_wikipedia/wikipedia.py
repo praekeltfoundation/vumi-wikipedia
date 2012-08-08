@@ -226,14 +226,18 @@ class WikipediaWorker(ApplicationWorker):
             content, '\n(Full content sent by SMS.)')
         self.reply_to(msg, ussd_cont, False)
         if self.sms_transport:
-            sms_content = normalize_whitespace(content)
-            # TODO: Decide if we want this.
-            sms_content = truncate_sms(sms_content)
-            bmsg = msg.reply(sms_content)
-            bmsg['transport_name'] = self.sms_transport
-            if self.override_sms_address:
-                bmsg['to_addr'] = self.override_sms_address
-            self.transport_publisher.publish_message(
-                bmsg, routing_key='%s.outbound' % (self.sms_transport,))
+            self.send_sms_content(msg, content)
         session['state'] = None
         returnValue(session)
+
+    def send_sms_content(self, msg, content):
+        sms_content = normalize_whitespace(content)
+        # TODO: Decide if we want this.
+        sms_content = truncate_sms(sms_content)
+        bmsg = msg.reply(sms_content)
+        bmsg['transport_name'] = self.sms_transport
+        bmsg['transport_type'] = 'sms'
+        if self.override_sms_address:
+            bmsg['to_addr'] = self.override_sms_address
+        self.transport_publisher.publish_message(
+            bmsg, routing_key='%s.outbound' % (self.sms_transport,))
