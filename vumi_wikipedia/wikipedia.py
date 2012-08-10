@@ -7,6 +7,7 @@ from twisted.python import log
 from vumi.application import ApplicationWorker
 from vumi.persist.txredis_manager import TxRedisManager
 from vumi.components.session import SessionManager
+from vumi.message import TransportUserMessage
 
 from vumi_wikipedia.wikipedia_api import WikipediaAPI, ArticleExtract
 from vumi_wikipedia.text_manglers import (
@@ -146,12 +147,42 @@ class WikipediaWorker(ApplicationWorker):
             extract = ArticleExtract(json.loads(data))
         returnValue(extract)
 
+    def _message_session_event(self, msg):
+        # First, check for session parameters on the message.
+        if msg['session_event'] == TransportUserMessage.SESSION_NEW:
+            return 'new'
+        elif msg['session_event'] == TransportUserMessage.SESSION_RESUME:
+            return 'resume'
+        elif msg['session_event'] == TransportUserMessage.SESSION_CLOSE:
+            return 'close'
+
+        # We don't have session data, so guess.
+        if msg['content'] is None:
+            return 'new'
+
+        return 'resume'
+
+    def close_session(self, msg):
+        # We handle all of this in consume_user_message.
+        return self.consume_user_message(msg)
+
     @inlineCallbacks
     def consume_user_message(self, msg):
         log.msg("Received: %s" % (msg.payload,))
         user_id = msg.user()
+        session_event = self._message_session_event(msg)
+
+        if session_event == 'close':
+            # Session closed, so clean up and don't reply.
+            yield self.session_manager.clear_session(user_id)
+            return
+
         session = yield self.session_manager.load_session(user_id)
-        if (not session) or (msg['content'] is None):
+        if not session:
+            # We have no session data, so treat this as 'new' even if it isn't.
+            session_event = 'new'
+
+        if session_event == 'new':
             session = yield self.session_manager.create_session(user_id)
             session['state'] = 'new'
 
@@ -236,16 +267,21 @@ class WikipediaWorker(ApplicationWorker):
             self.max_ussd_content_length, self.max_ussd_unicode_length)
         self.reply_to(msg, ussd_cont, False)
         if self.sms_transport:
-            sms_content = normalize_whitespace(content)
-            # TODO: Decide if we want this.
-            sms_content = truncate_sms(
-                sms_content,
-                self.max_sms_content_length, self.max_sms_unicode_length)
-            bmsg = msg.reply(sms_content)
-            bmsg['transport_name'] = self.sms_transport
-            if self.override_sms_address:
-                bmsg['to_addr'] = self.override_sms_address
-            self.transport_publisher.publish_message(
-                bmsg, routing_key='%s.outbound' % (self.sms_transport,))
+            self.send_sms_content(msg, content)
         session['state'] = None
         returnValue(session)
+
+    def send_sms_content(self, msg, content):
+        sms_content = normalize_whitespace(content)
+        # TODO: Decide if we want this.
+        sms_content = truncate_sms(
+            sms_content,
+            self.max_sms_content_length, self.max_sms_unicode_length)
+        sms_content = truncate_sms(sms_content)
+        bmsg = msg.reply(sms_content)
+        bmsg['transport_name'] = self.sms_transport
+        bmsg['transport_type'] = 'sms'
+        if self.override_sms_address:
+            bmsg['to_addr'] = self.override_sms_address
+        self.transport_publisher.publish_message(
+            bmsg, routing_key='%s.outbound' % (self.sms_transport,))

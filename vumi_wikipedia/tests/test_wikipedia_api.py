@@ -78,7 +78,10 @@ class FakeHTTP(Protocol):
 
     def build_response(self, response_data):
         lines = ["HTTP/1.1 %s" % (response_data['response_code'],)]
-        lines.extend(['', json.dumps(response_data['response_body'])])
+        body = response_data['response_body']
+        if isinstance(body, dict):
+            body = json.dumps(body)
+        lines.extend(['', body])
         return '\r\n'.join(lines)
 
     def handle_request(self, request_line, body):
@@ -140,6 +143,11 @@ class WikipediaAPITestCase(TestCase, FakeHTTPTestCaseMixin):
 
     def test_search_error(self):
         return self.assertFailure(self.wikipedia.search('.'), APIError)
+
+    @inlineCallbacks
+    def test_bad_response(self):
+        yield self.assertFailure(self.wikipedia.search('notjson'), APIError)
+        self.flushLoggedErrors()
 
     def test_search_no_results(self):
         return self.assert_api_result(

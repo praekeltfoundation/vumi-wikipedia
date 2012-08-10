@@ -7,6 +7,7 @@ from urllib import urlencode
 from twisted.internet.defer import inlineCallbacks, returnValue
 
 from vumi.utils import http_request_full
+from vumi import log
 
 
 def either(*args):
@@ -106,7 +107,13 @@ class WikipediaAPI(object):
         if self.PRINT_DEBUG:
             print response.delivered_body
             print "\n====="
-        returnValue(json.loads(response.delivered_body))
+        try:
+            returnValue(json.loads(response.delivered_body))
+        except Exception, e:
+            log.msg("Error reading API response: %s %r" % (
+                    response.code, response.delivered_body))
+            log.err()
+            raise APIError(e)
 
     @inlineCallbacks
     def search(self, query, limit=9):
