@@ -277,7 +277,6 @@ class WikipediaWorker(ApplicationWorker):
         sms_content = truncate_sms(
             sms_content,
             self.max_sms_content_length, self.max_sms_unicode_length)
-        sms_content = truncate_sms(sms_content)
         bmsg = msg.reply(sms_content)
         bmsg['transport_name'] = self.sms_transport
         bmsg['transport_type'] = 'sms'

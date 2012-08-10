@@ -34,7 +34,7 @@ CTHULHU_USSD = (
 CTHULHU_SMS = (
     u'The first half of the principal manuscript told a very peculiar tale. '
     u'It appears that on 1 March 1925, a thin, dark young man of neurotic '
-    u'and excited aspect...')
+    u'and excited aspect had...')
 
 
 class WikipediaWorkerTestCase(ApplicationTestCase, FakeHTTPTestCaseMixin):
