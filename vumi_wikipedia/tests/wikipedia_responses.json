@@ -56,6 +56,12 @@
         "response_body": {"servedby":"srv298","error":{"code":"srsearch-text-disabled","info":"text search is disabled"}}
     },
 
+    "GET /?action=query&format=json&srlimit=9&list=search&srsearch=notjson": {
+        "request_body": "",
+        "response_code": "200 OK",
+        "response_body": "Bad response."
+    },
+
     "So I don't have to keep screwing around with trailing commas.": null
 
 }
