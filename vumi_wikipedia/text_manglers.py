@@ -44,7 +44,7 @@ UNICODE_REGEX = re.compile(u'[\u0080-\uffff]')
 
 
 def is_unicode(string):
-    return UNICODE_REGEX.search(string) != None
+    return UNICODE_REGEX.search(string) is not None
 
 
 def truncate_sms(string, ascii_limit=160, unicode_limit=70, ellipsis=u'...'):
@@ -54,14 +54,14 @@ def truncate_sms(string, ascii_limit=160, unicode_limit=70, ellipsis=u'...'):
     for word in string.split(' '):
         longer_string = (result + ' ' + word).strip()
         if (((is_unicode(longer_string) and len(longer_string) > unicode_limit)
-            or (len(longer_string) > ascii_limit))):
+             or (len(longer_string) > ascii_limit))):
                 return result + ellipsis
         result = longer_string
     return result
 
 
 def truncate_sms_with_postfix(string, postfix, ascii_limit=160,
-    unicode_limit=70, ellipsis=u'...'):
+                              unicode_limit=70, ellipsis=u'...'):
         length = len(postfix)
         if is_unicode(postfix):
             ascii_limit = unicode_limit

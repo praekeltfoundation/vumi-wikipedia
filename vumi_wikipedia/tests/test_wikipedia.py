@@ -74,6 +74,10 @@ class WikipediaWorkerTestCase(ApplicationTestCase, FakeHTTPTestCaseMixin):
         yield self.stop_webserver()
         yield super(WikipediaWorkerTestCase, self).tearDown()
 
+    def assert_config_knob(self, attr, orig, new):
+        self.assertEqual(orig, getattr(self.worker, attr))
+        self.assertEqual(new, getattr(self.knobbly_worker, attr))
+
     def test_make_options(self):
         self.assertEqual((2, "1. foo\n2. bar"),
                          self.worker.make_options(['foo', 'bar']))
@@ -160,3 +164,31 @@ class WikipediaWorkerTestCase(ApplicationTestCase, FakeHTTPTestCaseMixin):
             '.', ('Sorry, there was an error processing your request. Please '
                   'try ' 'again later.'))
         self.flushLoggedErrors()
+
+    @inlineCallbacks
+    def test_config_knobs(self):
+        self.knobbly_worker = yield self.get_application({
+                'transport_name': self.transport_name,
+                'worker_name': 'wikitest',
+                'sms_transport': 'sphex_sms',
+
+                'api_url': 'https://localhost:1337/',
+                'accept_gzip': True,
+                'user_agent': 'Bob Howard',
+                'max_ussd_session_length': 200,
+                'content_cache_time': 1800,
+                'max_ussd_content_length': 180,
+                'max_ussd_unicode_length': 80,
+                'max_sms_content_length': 300,
+                'max_sms_unicode_length': 130,
+                })
+
+        self.assert_config_knob('api_url', self.url, 'https://localhost:1337/')
+        self.assert_config_knob('accept_gzip', None, True)
+        self.assert_config_knob('user_agent', None, 'Bob Howard')
+        self.assert_config_knob('max_ussd_session_length', 180, 200)
+        self.assert_config_knob('content_cache_time', 3600, 1800)
+        self.assert_config_knob('max_ussd_content_length', 160, 180)
+        self.assert_config_knob('max_ussd_unicode_length', 70, 80)
+        self.assert_config_knob('max_sms_content_length', 160, 300)
+        self.assert_config_knob('max_sms_unicode_length', 70, 130)
