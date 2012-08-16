@@ -33,8 +33,17 @@ CTHULHU_USSD = (
 
 CTHULHU_SMS = (
     u'The first half of the principal manuscript told a very peculiar tale. '
-    u'It appears that on 1 March 1925, a thin, dark young man of neurotic '
-    u'and excited aspect had...')
+    u'It appears that on 1 March 1925, a thin, dark young man of... (reply '
+    u'MORE for more)')
+
+CTHULHU_MORE = (
+    u'neurotic and excited aspect had called upon Professor Angell bearing '
+    u'the singular clay bas-relief, which was then exceedingly damp and... '
+    u'(reply MORE for more)')
+
+CTHULHU_END = (
+    u'Providence Art Club, anxious to preserve its conservatism, had found '
+    u'him quite hopeless.')
 
 
 class WikipediaWorkerTestCase(ApplicationTestCase, FakeHTTPTestCaseMixin):
@@ -201,11 +210,15 @@ class WikipediaWorkerTestCase(ApplicationTestCase, FakeHTTPTestCaseMixin):
         yield self.assert_response('1', CTHULHU_SECTIONS)
         yield self.assert_response('2', CTHULHU_USSD)
 
-        yield self.dispatch(self.mkmsg_in('more'), 'sphex_more.inbound')
+        for _ in range(8):
+            yield self.dispatch(self.mkmsg_in('more'), 'sphex_more.inbound')
 
-        [sms_1, sms_2] = self._amqp.get_messages('vumi', 'sphex_sms.outbound')
-        self.assertEqual(CTHULHU_SMS, sms_1['content'])
-        self.assertEqual('+41791234567', sms_1['to_addr'])
+        sms = self._amqp.get_messages('vumi', 'sphex_sms.outbound')
+        self.assertEqual(CTHULHU_SMS, sms[0]['content'])
+        self.assertEqual('+41791234567', sms[0]['to_addr'])
 
-        self.assertEqual('TODO: more content', sms_2['content'])
-        self.assertEqual('+41791234567', sms_2['to_addr'])
+        self.assertEqual(CTHULHU_MORE, sms[1]['content'])
+        self.assertEqual('+41791234567', sms[1]['to_addr'])
+
+        self.assertEqual(CTHULHU_END, sms[-1]['content'])
+        self.assertEqual('+41791234567', sms[-1]['to_addr'])

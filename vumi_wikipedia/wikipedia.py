@@ -11,7 +11,7 @@ from vumi.message import TransportUserMessage
 
 from vumi_wikipedia.wikipedia_api import WikipediaAPI, ArticleExtract
 from vumi_wikipedia.text_manglers import (
-    normalize_whitespace, truncate_sms, truncate_sms_with_postfix)
+    normalize_whitespace, truncate_content)
 
 
 class WikipediaUSSDFlow(object):
@@ -208,7 +208,8 @@ class WikipediaWorker(ApplicationWorker):
         pfunc = getattr(self, 'process_message_%s' % (session['state'],))
         try:
             session = yield pfunc(msg, session)
-            if session['state'] is not None:
+            if (session['state'] is not None) or (
+                    self.incoming_sms_transport is not None):
                 yield self.session_manager.save_session(user_id, session)
             else:
                 yield self.session_manager.clear_session(user_id)
@@ -271,14 +272,10 @@ class WikipediaWorker(ApplicationWorker):
         session['state'] = 'content'
         returnValue(session)
 
-    def truncate_content(self, content, postfix=None):
-        if postfix is not None:
-            return truncate_sms_with_postfix(
-                content, postfix, self.max_ussd_content_length,
-                self.max_ussd_unicode_length)
-        return truncate_sms(
-            content, self.max_ussd_content_length,
-            self.max_ussd_unicode_length)
+    def truncate_content(self, content, postfix=None, more_postfix=None):
+        return truncate_content(
+            content, postfix, more_postfix,
+            self.max_ussd_content_length, self.max_ussd_unicode_length)
 
     @inlineCallbacks
     def process_message_content(self, msg, session):
@@ -290,18 +287,24 @@ class WikipediaWorker(ApplicationWorker):
         page = json.loads(session['page'])
         extract = yield self.get_extract(page)
         content = extract.sections[int(msg['content'].strip()) - 1]['text']
-        ussd_cont = self.truncate_content(
+        session['sms_content'] = normalize_whitespace(content)
+        session['sms_offset'] = 0
+        _len, ussd_cont = self.truncate_content(
             content, '\n(Full content sent by SMS.)')
         self.reply_to(msg, ussd_cont, False)
         if self.sms_transport:
-            self.send_sms_content(msg, content)
+            session = yield self.send_sms_content(msg, session)
         session['state'] = None
         returnValue(session)
 
-    def send_sms_content(self, msg, content):
-        sms_content = normalize_whitespace(content)
-        # TODO: Decide if we want this.
-        sms_content = self.truncate_content(sms_content)
+    def send_sms_content(self, msg, session):
+        offset = int(session['sms_offset'])
+        content = session['sms_content'][offset:]
+        # TODO: Ellipsis prefix?
+        content_len, sms_content = self.truncate_content(
+            content, ' (reply MORE for more)', True)
+        session['sms_offset'] = offset + content_len + 1
+        # TODO: Clear session at end of content?
         bmsg = msg.reply(sms_content)
         bmsg['transport_name'] = self.sms_transport
         bmsg['transport_type'] = 'sms'
@@ -309,8 +312,18 @@ class WikipediaWorker(ApplicationWorker):
             bmsg['to_addr'] = self.override_sms_address
         self.transport_publisher.publish_message(
             bmsg, routing_key='%s.outbound' % (self.sms_transport,))
+        return session
 
     @inlineCallbacks
     def consume_sms_message(self, msg):
         log.msg("Received SMS: %s" % (msg.payload,))
-        yield self.send_sms_content(msg, 'TODO: more content')
+        user_id = msg.user()
+
+        session = yield self.session_manager.load_session(user_id)
+        if not session:
+            # TODO: Reply with error?
+            return
+
+        session = yield self.send_sms_content(msg, session)
+
+        yield self.session_manager.save_session(user_id, session)

@@ -47,6 +47,38 @@ def is_unicode(string):
     return UNICODE_REGEX.search(string) is not None
 
 
+def truncate_content(content, postfix=None, more_postfix=False,
+                     ascii_limit=160, unicode_limit=70, ellipsis=u'...'):
+    """Smart string truncation
+    """
+    def over_limit(text):
+        limit = unicode_limit if is_unicode(text) else ascii_limit
+        limit -= len(ellipsis)
+        if postfix:
+            limit -= len(postfix)
+        return len(text) > limit
+
+    content_length = 0
+    result = u''
+
+    words = content.split(' ')
+
+    while words:
+        word = words.pop(0)
+        longer_string = (result + ' ' + word).strip()
+        if over_limit(longer_string):
+            content_length = len(result)
+            result = result + ellipsis
+            break
+        result = longer_string
+        content_length = len(result)
+
+    if postfix is not None:
+        if (len(words) > 0) or (not more_postfix):
+            result += postfix
+    return content_length, result
+
+
 def truncate_sms(string, ascii_limit=160, unicode_limit=70, ellipsis=u'...'):
     """Smart string truncation
     """
