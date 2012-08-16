@@ -51,8 +51,13 @@ class WikipediaWorker(ApplicationWorker):
     user_agent : str, optional
         Override `User-Agent` header on API requests.
 
+    incoming_sms_transport : str, optional
+        If set, this specifies a different transport for receiving "more
+        content" SMS messages. If unset, incoming SMS messages will be ignored.
+
     max_ussd_session_length : int, optional
-        Lifetime of USSD session in seconds. Defaults to 3 minutes.
+        Lifetime of USSD session in seconds. Defaults to 3 minutes. (If
+        `incoming_sms_transport` is set, this should be set to a longer time.)
 
     content_cache_time : int, optional
         Lifetime of cached article content in seconds. Defaults to 1 hour.
@@ -83,6 +88,8 @@ class WikipediaWorker(ApplicationWorker):
 
     def validate_config(self):
         self.sms_transport = self._opt_config('sms_transport')
+        self.incoming_sms_transport = self._opt_config(
+            'incoming_sms_transport')
         self.override_sms_address = self._opt_config('override_sms_address')
         self.api_url = self._opt_config('api_url')
         self.accept_gzip = self._opt_config('accept_gzip')
@@ -114,6 +121,17 @@ class WikipediaWorker(ApplicationWorker):
 
         self.wikipedia = WikipediaAPI(
             self.api_url, self.accept_gzip, self.user_agent)
+
+        if self.incoming_sms_transport:
+            yield self._setup_sms_transport_consumer()
+
+    @inlineCallbacks
+    def _setup_sms_transport_consumer(self):
+        self.sms_transport_consumer = yield self.consume(
+            '%(incoming_sms_transport)s.inbound' % self.config,
+            self.consume_sms_message,
+            message_class=TransportUserMessage)
+        self._consumers.append(self.sms_transport_consumer)
 
     def teardown_application(self):
         return self.session_manager.stop()
@@ -173,9 +191,10 @@ class WikipediaWorker(ApplicationWorker):
         session_event = self._message_session_event(msg)
 
         if session_event == 'close':
-            # Session closed, so clean up and don't reply.
-            yield self.session_manager.clear_session(user_id)
-            return
+            if not self.allow_sms_more:
+                # Session closed, so clean up and don't reply.
+                yield self.session_manager.clear_session(user_id)
+                return
 
         session = yield self.session_manager.load_session(user_id)
         if not session:
@@ -252,6 +271,15 @@ class WikipediaWorker(ApplicationWorker):
         session['state'] = 'content'
         returnValue(session)
 
+    def truncate_content(self, content, postfix=None):
+        if postfix is not None:
+            return truncate_sms_with_postfix(
+                content, postfix, self.max_ussd_content_length,
+                self.max_ussd_unicode_length)
+        return truncate_sms(
+            content, self.max_ussd_content_length,
+            self.max_ussd_unicode_length)
+
     @inlineCallbacks
     def process_message_content(self, msg, session):
         sections = json.loads(session['results'])
@@ -262,9 +290,8 @@ class WikipediaWorker(ApplicationWorker):
         page = json.loads(session['page'])
         extract = yield self.get_extract(page)
         content = extract.sections[int(msg['content'].strip()) - 1]['text']
-        ussd_cont = truncate_sms_with_postfix(
-            content, '\n(Full content sent by SMS.)',
-            self.max_ussd_content_length, self.max_ussd_unicode_length)
+        ussd_cont = self.truncate_content(
+            content, '\n(Full content sent by SMS.)')
         self.reply_to(msg, ussd_cont, False)
         if self.sms_transport:
             self.send_sms_content(msg, content)
@@ -274,9 +301,7 @@ class WikipediaWorker(ApplicationWorker):
     def send_sms_content(self, msg, content):
         sms_content = normalize_whitespace(content)
         # TODO: Decide if we want this.
-        sms_content = truncate_sms(
-            sms_content,
-            self.max_sms_content_length, self.max_sms_unicode_length)
+        sms_content = self.truncate_content(sms_content)
         bmsg = msg.reply(sms_content)
         bmsg['transport_name'] = self.sms_transport
         bmsg['transport_type'] = 'sms'
@@ -284,3 +309,8 @@ class WikipediaWorker(ApplicationWorker):
             bmsg['to_addr'] = self.override_sms_address
         self.transport_publisher.publish_message(
             bmsg, routing_key='%s.outbound' % (self.sms_transport,))
+
+    @inlineCallbacks
+    def consume_sms_message(self, msg):
+        log.msg("Received SMS: %s" % (msg.payload,))
+        yield self.send_sms_content(msg, 'TODO: more content')

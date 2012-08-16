@@ -49,6 +49,7 @@ class WikipediaWorkerTestCase(ApplicationTestCase, FakeHTTPTestCaseMixin):
                 'worker_name': 'wikitest',
                 'sms_transport': 'sphex_sms',
                 'api_url': self.url,
+                'incoming_sms_transport': 'sphex_more',
                 })
         self.wikipedia = self.worker.wikipedia
 
@@ -192,3 +193,19 @@ class WikipediaWorkerTestCase(ApplicationTestCase, FakeHTTPTestCaseMixin):
         self.assert_config_knob('max_ussd_unicode_length', 70, 80)
         self.assert_config_knob('max_sms_content_length', 160, 300)
         self.assert_config_knob('max_sms_unicode_length', 70, 130)
+
+    @inlineCallbacks
+    def test_happy_flow_more(self):
+        yield self.start_session()
+        yield self.assert_response('cthulhu', CTHULHU_RESULTS)
+        yield self.assert_response('1', CTHULHU_SECTIONS)
+        yield self.assert_response('2', CTHULHU_USSD)
+
+        yield self.dispatch(self.mkmsg_in('more'), 'sphex_more.inbound')
+
+        [sms_1, sms_2] = self._amqp.get_messages('vumi', 'sphex_sms.outbound')
+        self.assertEqual(CTHULHU_SMS, sms_1['content'])
+        self.assertEqual('+41791234567', sms_1['to_addr'])
+
+        self.assertEqual('TODO: more content', sms_2['content'])
+        self.assertEqual('+41791234567', sms_2['to_addr'])
