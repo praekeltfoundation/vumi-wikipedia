@@ -10,8 +10,7 @@ from vumi.components.session import SessionManager
 from vumi.message import TransportUserMessage
 
 from vumi_wikipedia.wikipedia_api import WikipediaAPI, ArticleExtract
-from vumi_wikipedia.text_manglers import (
-    normalize_whitespace, truncate_content)
+from vumi_wikipedia.text_manglers import normalize_whitespace, ContentFormatter
 
 
 class WikipediaUSSDFlow(object):
@@ -121,6 +120,9 @@ class WikipediaWorker(ApplicationWorker):
 
         self.wikipedia = WikipediaAPI(
             self.api_url, self.accept_gzip, self.user_agent)
+
+        self.formatter = ContentFormatter(
+            self.max_ussd_content_length, self.max_ussd_unicode_length)
 
         if self.incoming_sms_transport:
             yield self._setup_sms_transport_consumer()
@@ -276,11 +278,6 @@ class WikipediaWorker(ApplicationWorker):
         session['state'] = 'content'
         returnValue(session)
 
-    def truncate_content(self, content, postfix=None, more_postfix=None):
-        return truncate_content(
-            content, postfix, more_postfix,
-            self.max_ussd_content_length, self.max_ussd_unicode_length)
-
     @inlineCallbacks
     def process_message_content(self, msg, session):
         sections = json.loads(session['results'])
@@ -293,7 +290,7 @@ class WikipediaWorker(ApplicationWorker):
         content = extract.sections[int(msg['content'].strip()) - 1]['text']
         session['sms_content'] = normalize_whitespace(content)
         session['sms_offset'] = 0
-        _len, ussd_cont = self.truncate_content(
+        _len, ussd_cont = self.formatter.format(
             content, '\n(Full content sent by SMS.)')
         self.reply_to(msg, ussd_cont, False)
         if self.sms_transport:
@@ -306,14 +303,12 @@ class WikipediaWorker(ApplicationWorker):
 
     def send_sms_content(self, msg, session):
         offset = int(session['sms_offset'])
-        content = session['sms_content'][offset:]
-        # TODO: Ellipsis prefix?
-        content_len, sms_content = self.truncate_content(
-            content, ' (reply MORE for more)', True)
+        content_len, sms_content = self.formatter.format_more(
+            session['sms_content'], offset, ' (reply MORE for more)')
         session['sms_offset'] = offset + content_len + 1
         if session['sms_offset'] >= len(session['sms_content']):
             session['state'] = None
-        # TODO: Clear session at end of content?
+
         bmsg = msg.reply(sms_content)
         bmsg['transport_name'] = self.sms_transport
         bmsg['transport_type'] = 'sms'
@@ -321,6 +316,7 @@ class WikipediaWorker(ApplicationWorker):
             bmsg['to_addr'] = self.override_sms_address
         self.transport_publisher.publish_message(
             bmsg, routing_key='%s.outbound' % (self.sms_transport,))
+
         return session
 
     @inlineCallbacks

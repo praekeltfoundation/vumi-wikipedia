@@ -37,13 +37,13 @@ CTHULHU_SMS = (
     u'MORE for more)')
 
 CTHULHU_MORE = (
-    u'neurotic and excited aspect had called upon Professor Angell bearing '
-    u'the singular clay bas-relief, which was then exceedingly damp and... '
+    u'...neurotic and excited aspect had called upon Professor Angell bearing '
+    u'the singular clay bas-relief, which was then exceedingly damp... '
     u'(reply MORE for more)')
 
 CTHULHU_END = (
-    u'Providence Art Club, anxious to preserve its conservatism, had found '
-    u'him quite hopeless.')
+    u'...towns. Even the Providence Art Club, anxious to preserve its '
+    u'conservatism, had found him quite hopeless.')
 
 
 class WikipediaWorkerTestCase(ApplicationTestCase, FakeHTTPTestCaseMixin):

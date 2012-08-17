@@ -47,36 +47,47 @@ def is_unicode(string):
     return UNICODE_REGEX.search(string) is not None
 
 
-def truncate_content(content, postfix=None, more_postfix=False,
-                     ascii_limit=160, unicode_limit=70, ellipsis=u'...'):
-    """Smart string truncation
-    """
-    def over_limit(text):
-        limit = unicode_limit if is_unicode(text) else ascii_limit
-        limit -= len(ellipsis)
-        if postfix:
-            limit -= len(postfix)
-        return len(text) > limit
+class ContentFormatter(object):
+    def __init__(self, ascii_limit, unicode_limit, pre_ellipsis=u'...',
+                 post_ellipsis=u'...'):
+        self.ascii_limit = ascii_limit
+        self.unicode_limit = unicode_limit
+        self.pre_ellipsis = pre_ellipsis
+        self.post_ellipsis = post_ellipsis
 
-    content_length = 0
-    result = u''
+    def get_limit(self, text, extra_len):
+        limit = self.unicode_limit if is_unicode(text) else self.ascii_limit
+        return limit - extra_len
 
-    words = content.split(' ')
+    def format_more(self, content, offset, more='', no_more=''):
+        extra_len = 0
+        text = content
 
-    while words:
-        word = words.pop(0)
-        longer_string = (result + ' ' + word).strip()
-        if over_limit(longer_string):
-            content_length = len(result)
-            result = result + ellipsis
-            break
-        result = longer_string
-        content_length = len(result)
+        if offset > 0:
+            text = self.pre_ellipsis + content[offset:]
+            extra_len += len(self.pre_ellipsis)
 
-    if postfix is not None:
-        if (len(words) > 0) or (not more_postfix):
-            result += postfix
-    return content_length, result
+        if len(text) <= self.get_limit(text, len(no_more)):
+            # Everything fits with the `no_more` text.
+            return ((len(text) - extra_len), text + no_more)
+
+        # It doesn't all fit, so we need ellipsis and `more`
+        return self.format(text, more, extra_len)
+
+    def format(self, content, postfix='', extra_len=0):
+        text = content
+
+        if len(text) <= self.get_limit(text, len(postfix)):
+            # Everything fits with the `postfix` text.
+            return ((len(text) - extra_len), text + postfix)
+
+        # It doesn't all fit, so we need ellipsis and `postfix`
+        postfix = self.post_ellipsis + postfix
+        while len(text) > self.get_limit(text, len(postfix)):
+            text = text.rsplit(None, 1)[0]
+
+        # TODO: Sentence breaks, if possible.
+        return ((len(text) - extra_len), text + postfix)
 
 
 def truncate_sms(string, ascii_limit=160, unicode_limit=70, ellipsis=u'...'):
