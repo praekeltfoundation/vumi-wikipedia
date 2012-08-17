@@ -73,6 +73,11 @@ class WikipediaWorker(ApplicationWorker):
     max_sms_unicode_length : int, optional
         Maximum character length of unicode SMS content. Defaults to 70.
 
+    sentence_break_threshold : int, optional
+        If a sentence break is found within this many characters of the end of
+        the truncated message, truncate at the sentence break instead of a word
+        break. Defaults to 10.
+
     more_content_postfix : str, optional
         Postfix for SMS content that can be continued. Ignored if
         `incoming_sms_transport` is not set. Defaults to ' (reply for more)'
@@ -89,6 +94,7 @@ class WikipediaWorker(ApplicationWorker):
     MAX_USSD_UNICODE_LENGTH = 70
     MAX_SMS_CONTENT_LENGTH = 160
     MAX_SMS_UNICODE_LENGTH = 70
+    SENTENCE_BREAK_THRESHOLD = 10
 
     MORE_CONTENT_POSTFIX = u' (reply for more)'
     NO_MORE_CONTENT_POSTFIX = u' (end of section)'
@@ -119,6 +125,8 @@ class WikipediaWorker(ApplicationWorker):
             'max_sms_content_length', self.MAX_SMS_CONTENT_LENGTH)
         self.max_sms_unicode_length = self.config.get(
             'max_sms_unicode_length', self.MAX_SMS_UNICODE_LENGTH)
+        self.sentence_break_threshold = self.config.get(
+            'sentence_break_threshold', self.SENTENCE_BREAK_THRESHOLD)
 
         if self.incoming_sms_transport:
             self.more_content_postfix = self.config.get(
@@ -145,7 +153,8 @@ class WikipediaWorker(ApplicationWorker):
             self.api_url, self.accept_gzip, self.user_agent)
 
         self.formatter = ContentFormatter(
-            self.max_ussd_content_length, self.max_ussd_unicode_length)
+            self.max_ussd_content_length, self.max_ussd_unicode_length,
+            sentence_break_threshold=self.sentence_break_threshold)
 
         if self.incoming_sms_transport:
             yield self._setup_sms_transport_consumer()

@@ -43,8 +43,8 @@ CTHULHU_SMS = (
 
 CTHULHU_MORE = (
     u'...and excited aspect had called upon Professor Angell bearing the '
-    u'singular clay bas-relief, which was then exceedingly damp and fresh. '
-    u'His... (reply for more)')
+    u'singular clay bas-relief, which was then exceedingly damp and fresh.... '
+    u'(reply for more)')
 
 CTHULHU_END = (
     u'...conservatism, had found him quite hopeless. (end of section)')

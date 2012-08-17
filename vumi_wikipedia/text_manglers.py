@@ -49,11 +49,12 @@ def is_unicode(string):
 
 class ContentFormatter(object):
     def __init__(self, ascii_limit, unicode_limit, pre_ellipsis=u'...',
-                 post_ellipsis=u'...'):
+                 post_ellipsis=u'...', sentence_break_threshold=10):
         self.ascii_limit = ascii_limit
         self.unicode_limit = unicode_limit
         self.pre_ellipsis = pre_ellipsis
         self.post_ellipsis = post_ellipsis
+        self.sentence_break_threshold = sentence_break_threshold
 
     def get_limit(self, text, extra_len):
         limit = self.unicode_limit if is_unicode(text) else self.ascii_limit
@@ -86,7 +87,11 @@ class ContentFormatter(object):
         while len(text) > self.get_limit(text, len(postfix)):
             text = text.rsplit(None, 1)[0]
 
-        # TODO: Sentence breaks, if possible.
+        # Try to break on sentence end if that won't cost too many characters.
+        if self.sentence_break_threshold > 0:
+            if '. ' in text[-self.sentence_break_threshold:]:
+                text = text.rsplit('. ', 1)[0] + '.'
+
         return ((len(text) - extra_len), text + postfix)
 
 
