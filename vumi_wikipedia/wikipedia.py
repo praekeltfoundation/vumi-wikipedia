@@ -191,7 +191,19 @@ class WikipediaWorker(ApplicationWorker):
         if session['state'] is None:
             yield self.session_manager.clear_session(user_id)
         else:
-            yield self.session_manager.save_session(user_id, session)
+            yield self.save_session(user_id, session)
+
+    @inlineCallbacks
+    def load_session(self, user_id):
+        session = yield self.session_manager.load_session(user_id)
+        if not session:
+            returnValue(session)
+        returnValue(dict((k, json.loads(v)) for k, v in session.items()))
+
+    def save_session(self, user_id, session):
+        if session:
+            session = dict((k, json.dumps(v)) for k, v in session.items())
+            return self.session_manager.save_session(user_id, session)
 
     @inlineCallbacks
     def consume_user_message(self, msg):
@@ -205,7 +217,7 @@ class WikipediaWorker(ApplicationWorker):
                 yield self.session_manager.clear_session(user_id)
                 return
 
-        session = yield self.session_manager.load_session(user_id)
+        session = yield self.load_session(user_id)
         if (not session) or (session['state'] == 'more'):
             # If we have no session data, treat this as 'new' even if it isn't.
             # Also, new USSD search overrides old "more content" session.
@@ -304,7 +316,7 @@ class WikipediaWorker(ApplicationWorker):
     def send_sms_content(self, msg, session):
         offset = int(session['sms_offset'])
         content_len, sms_content = self.formatter.format_more(
-            session['sms_content'], offset, ' (reply MORE for more)')
+            session['sms_content'], offset, u' (reply MORE for more)')
         session['sms_offset'] = offset + content_len + 1
         if session['sms_offset'] >= len(session['sms_content']):
             session['state'] = None
@@ -324,7 +336,7 @@ class WikipediaWorker(ApplicationWorker):
         log.msg("Received SMS: %s" % (msg.payload,))
         user_id = msg.user()
 
-        session = yield self.session_manager.load_session(user_id)
+        session = yield self.load_session(user_id)
         if not session:
             # TODO: Reply with error?
             return

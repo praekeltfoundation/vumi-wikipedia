@@ -59,7 +59,7 @@ class ContentFormatter(object):
         limit = self.unicode_limit if is_unicode(text) else self.ascii_limit
         return limit - extra_len
 
-    def format_more(self, content, offset, more='', no_more=''):
+    def format_more(self, content, offset, more=u'', no_more=u''):
         extra_len = 0
         text = content
 
@@ -74,7 +74,7 @@ class ContentFormatter(object):
         # It doesn't all fit, so we need ellipsis and `more`
         return self.format(text, more, extra_len)
 
-    def format(self, content, postfix='', extra_len=0):
+    def format(self, content, postfix=u'', extra_len=0):
         text = content
 
         if len(text) <= self.get_limit(text, len(postfix)):
