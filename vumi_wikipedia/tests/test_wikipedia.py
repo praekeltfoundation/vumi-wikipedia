@@ -28,26 +28,27 @@ CTHULHU_SECTIONS = '\n'.join([
 
 CTHULHU_USSD = (
     u'The first half of the principal manuscript told a very peculiar tale. '
-    u'It appears that on 1 March 1925, a thin, dark young man of...\n(Full '
+    u'It appears that on 1 March 1925, a thin, dark young man of ...\n(Full '
     u'content sent by SMS.)')
 
 CTHULHU_SMS_NO_MORE = (
     u'The first half of the principal manuscript told a very peculiar tale. '
     u'It appears that on 1 March 1925, a thin, dark young man of neurotic and '
-    u'excited aspect...')
+    u'excited aspect ...')
 
 CTHULHU_SMS = (
     u'The first half of the principal manuscript told a very peculiar tale. '
-    u'It appears that on 1 March 1925, a thin, dark young man of neurotic... '
+    u'It appears that on 1 March 1925, a thin, dark young man of neurotic ... '
     u'(reply for more)')
 
 CTHULHU_MORE = (
     u'...and excited aspect had called upon Professor Angell bearing the '
-    u'singular clay bas-relief, which was then exceedingly damp and fresh.... '
-    u'(reply for more)')
+    u'singular clay bas-relief, which was then exceedingly damp and fresh. '
+    u'... (reply for more)')
 
 CTHULHU_END = (
-    u'...conservatism, had found him quite hopeless. (end of section)')
+    u'...anxious to preserve its conservatism, had found him quite hopeless. '
+    u'(end of section)')
 
 
 class WikipediaWorkerTestCase(ApplicationTestCase, FakeHTTPTestCaseMixin):

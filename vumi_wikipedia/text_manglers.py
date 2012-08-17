@@ -49,7 +49,7 @@ def is_unicode(string):
 
 class ContentFormatter(object):
     def __init__(self, ascii_limit, unicode_limit, pre_ellipsis=u'...',
-                 post_ellipsis=u'...', sentence_break_threshold=10):
+                 post_ellipsis=u' ...', sentence_break_threshold=10):
         self.ascii_limit = ascii_limit
         self.unicode_limit = unicode_limit
         self.pre_ellipsis = pre_ellipsis
