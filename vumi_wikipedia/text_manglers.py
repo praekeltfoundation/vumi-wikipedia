@@ -47,6 +47,54 @@ def is_unicode(string):
     return UNICODE_REGEX.search(string) is not None
 
 
+class ContentFormatter(object):
+    def __init__(self, ascii_limit, unicode_limit, pre_ellipsis=u'...',
+                 post_ellipsis=u' ...', sentence_break_threshold=10):
+        self.ascii_limit = ascii_limit
+        self.unicode_limit = unicode_limit
+        self.pre_ellipsis = pre_ellipsis
+        self.post_ellipsis = post_ellipsis
+        self.sentence_break_threshold = sentence_break_threshold
+
+    def get_limit(self, text, extra_len):
+        limit = self.unicode_limit if is_unicode(text) else self.ascii_limit
+        return limit - extra_len
+
+    def format_more(self, content, offset, more=u'', no_more=u''):
+        extra_len = 0
+        text = content
+
+        if offset > 0:
+            text = self.pre_ellipsis + content[offset:]
+            extra_len += len(self.pre_ellipsis)
+
+        if len(text) <= self.get_limit(text, len(no_more)):
+            # Everything fits with the `no_more` text.
+            return ((len(text) - extra_len), text + no_more)
+
+        # It doesn't all fit, so we need ellipsis and `more`
+        return self.format(text, more, extra_len)
+
+    def format(self, content, postfix=u'', extra_len=0):
+        text = content
+
+        if len(text) <= self.get_limit(text, len(postfix)):
+            # Everything fits with the `postfix` text.
+            return ((len(text) - extra_len), text + postfix)
+
+        # It doesn't all fit, so we need ellipsis and `postfix`
+        postfix = self.post_ellipsis + postfix
+        while len(text) > self.get_limit(text, len(postfix)):
+            text = text.rsplit(None, 1)[0]
+
+        # Try to break on sentence end if that won't cost too many characters.
+        if self.sentence_break_threshold > 0:
+            if '. ' in text[-self.sentence_break_threshold:]:
+                text = text.rsplit('. ', 1)[0] + '.'
+
+        return ((len(text) - extra_len), text + postfix)
+
+
 def truncate_sms(string, ascii_limit=160, unicode_limit=70, ellipsis=u'...'):
     """Smart string truncation
     """
