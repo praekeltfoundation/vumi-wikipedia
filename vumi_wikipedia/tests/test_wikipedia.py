@@ -28,13 +28,27 @@ CTHULHU_SECTIONS = '\n'.join([
 
 CTHULHU_USSD = (
     u'The first half of the principal manuscript told a very peculiar tale. '
-    u'It appears that on 1 March 1925, a thin, dark young man of...\n(Full '
+    u'It appears that on 1 March 1925, a thin, dark young man of ...\n(Full '
     u'content sent by SMS.)')
+
+CTHULHU_SMS_NO_MORE = (
+    u'The first half of the principal manuscript told a very peculiar tale. '
+    u'It appears that on 1 March 1925, a thin, dark young man of neurotic and '
+    u'excited aspect ...')
 
 CTHULHU_SMS = (
     u'The first half of the principal manuscript told a very peculiar tale. '
-    u'It appears that on 1 March 1925, a thin, dark young man of neurotic '
-    u'and excited aspect had...')
+    u'It appears that on 1 March 1925, a thin, dark young man of neurotic ... '
+    u'(reply for more)')
+
+CTHULHU_MORE = (
+    u'...and excited aspect had called upon Professor Angell bearing the '
+    u'singular clay bas-relief, which was then exceedingly damp and fresh. '
+    u'... (reply for more)')
+
+CTHULHU_END = (
+    u'...anxious to preserve its conservatism, had found him quite hopeless. '
+    u'(end of section)')
 
 
 class WikipediaWorkerTestCase(ApplicationTestCase, FakeHTTPTestCaseMixin):
@@ -49,6 +63,7 @@ class WikipediaWorkerTestCase(ApplicationTestCase, FakeHTTPTestCaseMixin):
                 'worker_name': 'wikitest',
                 'sms_transport': 'sphex_sms',
                 'api_url': self.url,
+                'incoming_sms_transport': 'sphex_more',
                 })
         self.wikipedia = self.worker.wikipedia
 
@@ -125,7 +140,7 @@ class WikipediaWorkerTestCase(ApplicationTestCase, FakeHTTPTestCaseMixin):
         yield self.assert_response('2', CTHULHU_USSD)
 
         [sms_msg] = self._amqp.get_messages('vumi', 'sphex_sms.outbound')
-        self.assertEqual(CTHULHU_SMS, sms_msg['content'])
+        self.assertEqual(CTHULHU_SMS_NO_MORE, sms_msg['content'])
         self.assertEqual('blah', sms_msg['to_addr'])
 
     @inlineCallbacks
@@ -192,3 +207,41 @@ class WikipediaWorkerTestCase(ApplicationTestCase, FakeHTTPTestCaseMixin):
         self.assert_config_knob('max_ussd_unicode_length', 70, 80)
         self.assert_config_knob('max_sms_content_length', 160, 300)
         self.assert_config_knob('max_sms_unicode_length', 70, 130)
+
+    @inlineCallbacks
+    def test_happy_flow_more(self):
+        yield self.start_session()
+        yield self.assert_response('cthulhu', CTHULHU_RESULTS)
+        yield self.assert_response('1', CTHULHU_SECTIONS)
+        yield self.assert_response('2', CTHULHU_USSD)
+
+        for _ in range(8):
+            yield self.dispatch(self.mkmsg_in('more'), 'sphex_more.inbound')
+
+        sms = self._amqp.get_messages('vumi', 'sphex_sms.outbound')
+        self.assertEqual(CTHULHU_SMS, sms[0]['content'])
+        self.assertEqual('+41791234567', sms[0]['to_addr'])
+
+        self.assertEqual(CTHULHU_MORE, sms[1]['content'])
+        self.assertEqual('+41791234567', sms[1]['to_addr'])
+
+        self.assertEqual(CTHULHU_END, sms[-1]['content'])
+        self.assertEqual('+41791234567', sms[-1]['to_addr'])
+
+    @inlineCallbacks
+    def test_more_then_new(self):
+        yield self.start_session()
+        yield self.assert_response('cthulhu', CTHULHU_RESULTS)
+        yield self.assert_response('1', CTHULHU_SECTIONS)
+        yield self.assert_response('2', CTHULHU_USSD)
+
+        yield self.dispatch(self.mkmsg_in('more'), 'sphex_more.inbound')
+
+        [sms_0, sms_1] = self._amqp.get_messages('vumi', 'sphex_sms.outbound')
+        self.assertEqual(CTHULHU_SMS, sms_0['content'])
+        self.assertEqual('+41791234567', sms_0['to_addr'])
+        self.assertEqual(CTHULHU_MORE, sms_1['content'])
+        self.assertEqual('+41791234567', sms_1['to_addr'])
+
+        yield self.start_session()
+        yield self.assert_response('cthulhu', CTHULHU_RESULTS)
