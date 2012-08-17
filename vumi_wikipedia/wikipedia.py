@@ -366,6 +366,12 @@ class WikipediaWorker(ApplicationWorker):
     @inlineCallbacks
     def consume_sms_message(self, msg):
         log.msg("Received SMS: %s" % (msg.payload,))
+
+        # This is to exclude some spurious messages we might receive.
+        if msg['content'] is None:
+            log.msg("No content, ignoring.")
+            return
+
         user_id = msg.user()
 
         session = yield self.load_session(user_id)
