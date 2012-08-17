@@ -222,3 +222,21 @@ class WikipediaWorkerTestCase(ApplicationTestCase, FakeHTTPTestCaseMixin):
 
         self.assertEqual(CTHULHU_END, sms[-1]['content'])
         self.assertEqual('+41791234567', sms[-1]['to_addr'])
+
+    @inlineCallbacks
+    def test_more_then_new(self):
+        yield self.start_session()
+        yield self.assert_response('cthulhu', CTHULHU_RESULTS)
+        yield self.assert_response('1', CTHULHU_SECTIONS)
+        yield self.assert_response('2', CTHULHU_USSD)
+
+        yield self.dispatch(self.mkmsg_in('more'), 'sphex_more.inbound')
+
+        [sms_0, sms_1] = self._amqp.get_messages('vumi', 'sphex_sms.outbound')
+        self.assertEqual(CTHULHU_SMS, sms_0['content'])
+        self.assertEqual('+41791234567', sms_0['to_addr'])
+        self.assertEqual(CTHULHU_MORE, sms_1['content'])
+        self.assertEqual('+41791234567', sms_1['to_addr'])
+
+        yield self.start_session()
+        yield self.assert_response('cthulhu', CTHULHU_RESULTS)

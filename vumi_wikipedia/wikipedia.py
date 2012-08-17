@@ -185,6 +185,13 @@ class WikipediaWorker(ApplicationWorker):
         return self.consume_user_message(msg)
 
     @inlineCallbacks
+    def handle_session_result(self, user_id, session):
+        if session['state'] is None:
+            yield self.session_manager.clear_session(user_id)
+        else:
+            yield self.session_manager.save_session(user_id, session)
+
+    @inlineCallbacks
     def consume_user_message(self, msg):
         log.msg("Received: %s" % (msg.payload,))
         user_id = msg.user()
@@ -197,8 +204,9 @@ class WikipediaWorker(ApplicationWorker):
                 return
 
         session = yield self.session_manager.load_session(user_id)
-        if not session:
-            # We have no session data, so treat this as 'new' even if it isn't.
+        if (not session) or (session['state'] == 'more'):
+            # If we have no session data, treat this as 'new' even if it isn't.
+            # Also, new USSD search overrides old "more content" session.
             session_event = 'new'
 
         if session_event == 'new':
@@ -208,11 +216,7 @@ class WikipediaWorker(ApplicationWorker):
         pfunc = getattr(self, 'process_message_%s' % (session['state'],))
         try:
             session = yield pfunc(msg, session)
-            if (session['state'] is not None) or (
-                    self.incoming_sms_transport is not None):
-                yield self.session_manager.save_session(user_id, session)
-            else:
-                yield self.session_manager.clear_session(user_id)
+            yield self.handle_session_result(user_id, session)
         except:
             log.err()
             self.reply_to(
@@ -294,7 +298,10 @@ class WikipediaWorker(ApplicationWorker):
         self.reply_to(msg, ussd_cont, False)
         if self.sms_transport:
             session = yield self.send_sms_content(msg, session)
-        session['state'] = None
+        if self.incoming_sms_transport is None:
+            session['state'] = None
+        else:
+            session['state'] = 'more'
         returnValue(session)
 
     def send_sms_content(self, msg, session):
@@ -304,6 +311,8 @@ class WikipediaWorker(ApplicationWorker):
         content_len, sms_content = self.truncate_content(
             content, ' (reply MORE for more)', True)
         session['sms_offset'] = offset + content_len + 1
+        if session['sms_offset'] >= len(session['sms_content']):
+            session['state'] = None
         # TODO: Clear session at end of content?
         bmsg = msg.reply(sms_content)
         bmsg['transport_name'] = self.sms_transport
@@ -324,6 +333,10 @@ class WikipediaWorker(ApplicationWorker):
             # TODO: Reply with error?
             return
 
-        session = yield self.send_sms_content(msg, session)
-
-        yield self.session_manager.save_session(user_id, session)
+        try:
+            session = yield self.send_sms_content(msg, session)
+            yield self.handle_session_result(user_id, session)
+        except:
+            log.err()
+            # TODO: Reply with error?
+            yield self.session_manager.clear_session(user_id)
