@@ -152,8 +152,12 @@ class WikipediaWorker(ApplicationWorker):
         self.wikipedia = WikipediaAPI(
             self.api_url, self.accept_gzip, self.user_agent)
 
-        self.formatter = ContentFormatter(
+        self.ussd_formatter = ContentFormatter(
             self.max_ussd_content_length, self.max_ussd_unicode_length,
+            sentence_break_threshold=0)
+
+        self.sms_formatter = ContentFormatter(
+            self.max_sms_content_length, self.max_sms_unicode_length,
             sentence_break_threshold=self.sentence_break_threshold)
 
         if self.incoming_sms_transport:
@@ -334,7 +338,7 @@ class WikipediaWorker(ApplicationWorker):
         content = extract.sections[int(msg['content'].strip()) - 1]['text']
         session['sms_content'] = normalize_whitespace(content)
         session['sms_offset'] = 0
-        _len, ussd_cont = self.formatter.format(
+        _len, ussd_cont = self.ussd_formatter.format(
             content, '\n(Full content sent by SMS.)')
         self.reply_to(msg, ussd_cont, False)
         if self.sms_transport:
@@ -346,7 +350,7 @@ class WikipediaWorker(ApplicationWorker):
         returnValue(session)
 
     def send_sms_content(self, msg, session):
-        content_len, sms_content = self.formatter.format_more(
+        content_len, sms_content = self.sms_formatter.format_more(
             session['sms_content'], session['sms_offset'],
             self.more_content_postfix, self.no_more_content_postfix)
         session['sms_offset'] = session['sms_offset'] + content_len + 1
