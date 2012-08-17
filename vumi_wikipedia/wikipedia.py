@@ -72,6 +72,14 @@ class WikipediaWorker(ApplicationWorker):
 
     max_sms_unicode_length : int, optional
         Maximum character length of unicode SMS content. Defaults to 70.
+
+    more_content_postfix : str, optional
+        Postfix for SMS content that can be continued. Ignored if
+        `incoming_sms_transport` is not set. Defaults to ' (reply for more)'
+
+    no_more_content_postfix : str, optional
+        Postfix for SMS content that is complete. Ignored if
+        `incoming_sms_transport` is not set. Defaults to ' (end of section)'
     """
 
     MAX_USSD_SESSION_LENGTH = 3 * 60
@@ -82,6 +90,9 @@ class WikipediaWorker(ApplicationWorker):
     MAX_SMS_CONTENT_LENGTH = 160
     MAX_SMS_UNICODE_LENGTH = 70
 
+    MORE_CONTENT_POSTFIX = u' (reply for more)'
+    NO_MORE_CONTENT_POSTFIX = u' (end of section)'
+
     def _opt_config(self, name):
         return self.config.get(name, None)
 
@@ -90,13 +101,16 @@ class WikipediaWorker(ApplicationWorker):
         self.incoming_sms_transport = self._opt_config(
             'incoming_sms_transport')
         self.override_sms_address = self._opt_config('override_sms_address')
+
         self.api_url = self._opt_config('api_url')
         self.accept_gzip = self._opt_config('accept_gzip')
         self.user_agent = self._opt_config('user_agent')
+
         self.max_ussd_session_length = self.config.get(
             'max_ussd_session_length', self.MAX_USSD_SESSION_LENGTH)
         self.content_cache_time = self.config.get(
             'content_cache_time', self.CONTENT_CACHE_TIME)
+
         self.max_ussd_content_length = self.config.get(
             'max_ussd_content_length', self.MAX_USSD_CONTENT_LENGTH)
         self.max_ussd_unicode_length = self.config.get(
@@ -105,6 +119,15 @@ class WikipediaWorker(ApplicationWorker):
             'max_sms_content_length', self.MAX_SMS_CONTENT_LENGTH)
         self.max_sms_unicode_length = self.config.get(
             'max_sms_unicode_length', self.MAX_SMS_UNICODE_LENGTH)
+
+        if self.incoming_sms_transport:
+            self.more_content_postfix = self.config.get(
+                'more_content_postfix', self.MORE_CONTENT_POSTFIX)
+            self.no_more_content_postfix = self.config.get(
+                'no_more_content_postfix', self.NO_MORE_CONTENT_POSTFIX)
+        else:
+            self.more_content_postfix = u''
+            self.no_more_content_postfix = u''
 
     @inlineCallbacks
     def setup_application(self):
@@ -212,7 +235,7 @@ class WikipediaWorker(ApplicationWorker):
         session_event = self._message_session_event(msg)
 
         if session_event == 'close':
-            if not self.allow_sms_more:
+            if not self.incoming_sms_transport:
                 # Session closed, so clean up and don't reply.
                 yield self.session_manager.clear_session(user_id)
                 return
@@ -314,10 +337,10 @@ class WikipediaWorker(ApplicationWorker):
         returnValue(session)
 
     def send_sms_content(self, msg, session):
-        offset = int(session['sms_offset'])
         content_len, sms_content = self.formatter.format_more(
-            session['sms_content'], offset, u' (reply MORE for more)')
-        session['sms_offset'] = offset + content_len + 1
+            session['sms_content'], session['sms_offset'],
+            self.more_content_postfix, self.no_more_content_postfix)
+        session['sms_offset'] = session['sms_offset'] + content_len + 1
         if session['sms_offset'] >= len(session['sms_content']):
             session['state'] = None
 
