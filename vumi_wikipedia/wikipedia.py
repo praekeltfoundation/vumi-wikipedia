@@ -194,11 +194,12 @@ class WikipediaWorker(ApplicationWorker):
         data = yield self.extract_redis.get(key)
         if data is None:
             extract = yield self.wikipedia.get_extract(title)
-            data = json.dumps(extract.sections)
-            # We do this in two steps because our redis clients disagree on
-            # what SETEX should look like.
-            yield self.extract_redis.set(key, data)
-            yield self.extract_redis.expire(key, self.content_cache_time)
+            if self.content_cache_time > 0:
+                data = json.dumps(extract.sections)
+                # We do this in two steps because our redis clients disagree on
+                # what SETEX should look like.
+                yield self.extract_redis.set(key, data)
+                yield self.extract_redis.expire(key, self.content_cache_time)
         else:
             extract = ArticleExtract(json.loads(data))
         returnValue(extract)
