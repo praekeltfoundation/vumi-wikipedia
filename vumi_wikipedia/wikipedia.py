@@ -251,7 +251,9 @@ class WikipediaWorker(ApplicationWorker):
             if not self.incoming_sms_transport:
                 # Session closed, so clean up and don't reply.
                 yield self.session_manager.clear_session(user_id)
-                return
+            # We never want to respond to close messages, even if we keep the
+            # session alive for the "more" handling.
+            return
 
         session = yield self.load_session(user_id)
         if (not session) or (session['state'] == 'more'):
