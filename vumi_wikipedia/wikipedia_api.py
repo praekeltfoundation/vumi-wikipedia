@@ -43,7 +43,7 @@ class ArticleExtract(object):
         split_data = ARTICLE_SPLITTER.split(data)
 
         # Start building the section tree with the intro.
-        self.sections = [ArticleSectionExtract(0, None, split_data[0].strip())]
+        self.sections = [ArticleSection(0, None, split_data[0].strip())]
 
         section_bits = []
         for section in split_data[1:]:
@@ -61,7 +61,7 @@ class ArticleExtract(object):
 
         for level, title, text in section_bits:
             level = levels[level]
-            section = ArticleSectionExtract(level, title, text)
+            section = ArticleSection(level, title, text)
             if level == 0:
                 self.sections.append(section)
             else:
@@ -72,11 +72,11 @@ class ArticleExtract(object):
 
     @classmethod
     def from_json(cls, data):
-        return cls([ArticleSectionExtract.from_dict(section)
+        return cls([ArticleSection.from_dict(section)
                     for section in json.loads(data)])
 
 
-class ArticleSectionExtract(object):
+class ArticleSection(object):
     def __init__(self, level, title, text):
         self.level = level
         self.title = title
