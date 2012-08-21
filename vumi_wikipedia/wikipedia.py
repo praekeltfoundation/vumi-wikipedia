@@ -195,13 +195,12 @@ class WikipediaWorker(ApplicationWorker):
         if data is None:
             extract = yield self.wikipedia.get_extract(title)
             if self.content_cache_time > 0:
-                data = json.dumps(extract.sections)
                 # We do this in two steps because our redis clients disagree on
                 # what SETEX should look like.
-                yield self.extract_redis.set(key, data)
+                yield self.extract_redis.set(key, extract.to_json())
                 yield self.extract_redis.expire(key, self.content_cache_time)
         else:
-            extract = ArticleExtract(json.loads(data))
+            extract = ArticleExtract.from_json(data)
         returnValue(extract)
 
     def _message_session_event(self, msg):
@@ -321,8 +320,7 @@ class WikipediaWorker(ApplicationWorker):
 
         session['page'] = json.dumps(selection)
         extract = yield self.get_extract(selection)
-        results = extract.get_section_titles()  # TODO:
-        results = [selection] + results
+        results = [selection] + [s.title for s in extract.sections[1:]]
         count, msgcontent = self.make_options([r for r in results])
         session['results'] = json.dumps(results[:count])
         self.reply_to(msg, msgcontent, True)
@@ -338,7 +336,7 @@ class WikipediaWorker(ApplicationWorker):
             returnValue(session)
         page = json.loads(session['page'])
         extract = yield self.get_extract(page)
-        content = extract.sections[int(msg['content'].strip()) - 1]['text']
+        content = extract.sections[int(msg['content'].strip()) - 1].full_text()
         session['sms_content'] = normalize_whitespace(content)
         session['sms_offset'] = 0
         _len, ussd_cont = self.ussd_formatter.format(
