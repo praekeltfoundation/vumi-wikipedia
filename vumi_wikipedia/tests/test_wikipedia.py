@@ -22,8 +22,7 @@ CTHULHU_SECTIONS = '\n'.join([
         u'1. Cthulhu',
         u'2. History',
         u'3. Geography',
-        u'4. Mountains of Madness',
-        u'5. Lulz',
+        u'4. Lulz',
         ])
 
 CTHULHU_USSD = (
