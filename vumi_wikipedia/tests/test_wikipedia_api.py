@@ -20,34 +20,38 @@ def make_extract(text):
 
 
 class ArticleExtractTestCase(TestCase):
+    def assert_titles(self, ae, *titles):
+        self.assertEqual(list(titles), [s.title for s in ae.sections])
+
+    def assert_texts(self, ae, *texts):
+        self.assertEqual(list(texts), [s.text for s in ae.sections])
+
+    def assert_full_texts(self, ae, *texts):
+        self.assertEqual(list(texts), [s.full_text() for s in ae.sections])
+
     def test_one_section(self):
         ae = make_extract(u'foo\nbar')
-        self.assertEqual([u'foo\nbar'], ae.get_section_texts())
-        self.assertEqual([], ae.get_section_titles())
-        self.assertEqual(
-            [{'title': None, 'level': None, 'text': u'foo\nbar'}], ae.sections)
-        self.assertEqual([{'title': None, 'level': None, 'text': u'foo\nbar'}],
-            ae.get_top_level_sections())
+        self.assert_titles(ae, None)
+        self.assert_texts(ae, u'foo\nbar')
 
     def test_multiple_sections(self):
         ae = make_extract(u'foo\n\n\n%(2)s bar \nbaz\n%(2)squux\n\n\nlol')
-        self.assertEqual([u'foo', u'baz', u'lol'], ae.get_section_texts())
-        self.assertEqual([u'bar', u'quux'], ae.get_section_titles())
+        self.assert_titles(ae, None, u'bar', u'quux')
+        self.assert_texts(ae, u'foo', u'baz', u'lol')
 
     def test_nested_sections(self):
         ae = make_extract(u'%(2)sfoo\n%(3)s bar \ntext')
-        self.assertEqual([u'', u'', u'text'], ae.get_section_texts())
-        self.assertEqual([u'foo', u'bar'], ae.get_section_titles())
-        self.assertEqual([{'level': None, 'text': u'', 'title': None},
-            {'level': 2, 'text': u'', 'title': u'foo'}
-            ], ae.get_top_level_sections())
+        self.assert_titles(ae, None, u'foo')
+        self.assert_texts(ae, u'', u'')
+        self.assert_full_texts(ae, u'', u'bar:\n\ntext')
+
+        self.assertEqual(u'bar', ae.sections[1].get_subsections()[0].title)
+        self.assertEqual(u'text', ae.sections[1].get_subsections()[0].text)
 
     def test_empty_input(self):
         ae = ArticleExtract(u'')
-        self.assertEqual([u''], ae.get_section_texts())
-        self.assertEqual([], ae.get_section_titles())
-        self.assertEqual([{'title': None, 'level': None, 'text': u''}],
-            ae.sections)
+        self.assertEqual([u''], [s.text for s in ae.sections])
+        self.assertEqual([None], [s.title for s in ae.sections])
 
 
 WIKIPEDIA_RESPONSES = json.load(
@@ -155,7 +159,7 @@ class WikipediaAPITestCase(TestCase, FakeHTTPTestCaseMixin):
 
     def test_get_extract(self):
         def assert_extract(extract):
-            self.assertEqual(5, len(extract.sections))
+            self.assertEqual(4, len(extract.sections))
 
         return self.wikipedia.get_extract('Cthulhu').addCallback(
             assert_extract)
