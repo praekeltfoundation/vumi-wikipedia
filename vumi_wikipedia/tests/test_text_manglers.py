@@ -1,24 +1,10 @@
-# -*- coding=utf-8 -*-
-
 from twisted.trial.unittest import TestCase
 
-from vumi_wikipedia.text_manglers import (mangle_text, convert_unicode,
-    normalize_whitespace, is_unicode, truncate_sms, truncate_sms_with_postfix)
+from vumi_wikipedia.text_manglers import (convert_unicode,
+    normalize_whitespace, is_unicode, ContentFormatter)
 
 
 class TextManglersTestCase(TestCase):
-
-    def test_mangle_text(self):
-        rev = lambda t: ''.join(reversed(t))
-        upp = lambda t: t.upper()
-        add = lambda t: ''.join([t, 'd'])
-        self.assertEqual(u'abc', mangle_text(u'abc'))
-        self.assertEqual(u'cba', mangle_text(u'abc', [rev]))
-        self.assertEqual(u'abc', mangle_text(u'abc', [rev, rev]))
-        self.assertEqual(u'CBA', mangle_text(u'abc', [rev, upp]))
-        self.assertEqual(u'dCBA', mangle_text(u'abc', [upp, add, rev]))
-        self.assertEqual(u'CBAD', mangle_text(u'abc', [rev, add, upp]))
-
     def test_convert_unicode(self):
         self.assertEqual(u'a-b c', convert_unicode(u'a\u2013b\xa0c'))
 
@@ -27,21 +13,59 @@ class TextManglersTestCase(TestCase):
 
     def test_is_unicode(self):
         self.assertFalse(is_unicode(u'@foo^bar!'))
-        self.assertTrue(is_unicode(u'foobar \n превед'))
+        self.assertTrue(is_unicode(
+                u'foobar \n \u043f\u0440\u0435\u0432\u0435\u0434'))
 
-    def test_truncate_sms(self):
-        self.assertEquals(u'', truncate_sms(u''))
-        self.assertEquals(u'foo...', truncate_sms(u'foo bar', 6, 3))
-        self.assertEquals(u'Спасибо Пукину...',
-            truncate_sms(u'Спасибо Пукину за это', 30, 15))
 
-    def test_truncate_sms_with_postfix(self):
-        self.assertEquals(u'foo bar... (for more madness, program in Python)',
-            truncate_sms_with_postfix(u'foo bar baz',
-            u' (for more madness, program in Python)', 46, 23))
-        self.assertEquals(u'хрень какая-то... (testetstest)',
-            truncate_sms_with_postfix(u'хрень какая-то нахреначилася',
-            u' (testetstest)', 60, 30))
-        self.assertEquals(u'foo bar... (превед)',
-            truncate_sms_with_postfix(u'foo bar baz',
-            u' (превед)', 32, 16))
+UNI_BIT = u'\u044d\u0442\u043e'
+
+
+def long_ascii(bits=50, suffix=u''):
+    return u' '.join([u'abc'] * bits) + suffix
+
+
+def long_unicode(bits=50, suffix=u''):
+    return u' '.join([u'\u044d\u0442\u043e'] * bits) + suffix
+
+
+class ContentFormatterTestCase(TestCase):
+
+    def test_format_simple(self):
+        cf = ContentFormatter(160, 70)
+        self.assertEqual(u'', cf.format(u''))
+        self.assertEqual(u'a', cf.format(u'a'))
+        self.assertEqual(UNI_BIT, cf.format(UNI_BIT))
+        self.assertEqual(long_ascii(39, u' ...'), cf.format(long_ascii()))
+        self.assertEqual(long_unicode(16, u' ...'), cf.format(long_unicode()))
+
+    def test_format_postfix(self):
+        cf = ContentFormatter(160, 70)
+        self.assertEqual(u' (postfix)', cf.format(u'', u' (postfix)'))
+        self.assertEqual(u'a (postfix)', cf.format(u'a', u' (postfix)'))
+        self.assertEqual(u'%s (postfix)' % UNI_BIT,
+                         cf.format(UNI_BIT, u' (postfix)'))
+        self.assertEqual(long_ascii(36, u' ... (postfix)'),
+                         cf.format(long_ascii(), u' (postfix)'))
+        self.assertEqual(long_unicode(14, u' ... (postfix)'),
+                         cf.format(long_unicode(), u' (postfix)'))
+
+    def test_format_more(self):
+        cf = ContentFormatter(160, 70)
+        fmt = lambda txt, i: cf.format_more(txt, i, u' (more)', u' (no more)')
+
+        self.assertEqual((0, u' (no more)'), fmt(u'', 0))
+        self.assertEqual((1, u'a (no more)'), fmt(u'a', 0))
+        self.assertEqual((3, u'%s (no more)' % UNI_BIT), fmt(UNI_BIT, 0))
+        self.assertEqual((1, u'...a (no more)'), fmt(u'a a', 2))
+        self.assertEqual((3, u'...%s (no more)' % UNI_BIT),
+                         fmt(long_unicode(2), 4))
+
+        self.assertEqual((147, long_ascii(37, u' ... (more)')),
+                         fmt(long_ascii(), 0))
+        self.assertEqual((59, long_unicode(15, u' ... (more)')),
+                         fmt(long_unicode(), 0))
+
+        self.assertEqual((143, u'...' + long_ascii(36, u' ... (more)')),
+                         fmt(long_ascii(), 4))
+        self.assertEqual((55, u'...' + long_unicode(14, u' ... (more)')),
+                         fmt(long_unicode(), 4))

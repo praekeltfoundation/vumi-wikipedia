@@ -339,7 +339,7 @@ class WikipediaWorker(ApplicationWorker):
         content = extract.sections[int(msg['content'].strip()) - 1].full_text()
         session['sms_content'] = normalize_whitespace(content)
         session['sms_offset'] = 0
-        _len, ussd_cont = self.ussd_formatter.format(
+        ussd_cont = self.ussd_formatter.format(
             content, '\n(Full content sent by SMS.)')
         self.reply_to(msg, ussd_cont, False)
         if self.sms_transport:
