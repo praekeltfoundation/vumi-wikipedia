@@ -13,11 +13,6 @@ from vumi_wikipedia.wikipedia_api import WikipediaAPI, ArticleExtract
 from vumi_wikipedia.text_manglers import normalize_whitespace, ContentFormatter
 
 
-class WikipediaUSSDFlow(object):
-    def __init__(self, worker, session):
-        self.session = session
-
-
 def mkmenu(options, prefix, start=1):
     return prefix + '\n'.join(
         ['%s. %s' % (idx, opt) for idx, opt in enumerate(options, start)])
@@ -178,8 +173,7 @@ class WikipediaWorker(ApplicationWorker):
         """
         Turn a list of results into an enumerated multiple choice list
         """
-        joined = mkmenu(options, prefix,
-         start)
+        joined = mkmenu(options, prefix, start)
         while len(joined) > self.max_ussd_content_length:
             if not options:
                 break
@@ -189,19 +183,23 @@ class WikipediaWorker(ApplicationWorker):
         return len(options), joined[:self.max_ussd_content_length]
 
     @inlineCallbacks
-    def get_extract(self, title):
+    def _get_cached_extract(self, title):
         key = self.wikipedia.url + ':' + title
         data = yield self.extract_redis.get(key)
         if data is None:
             extract = yield self.wikipedia.get_extract(title)
-            if self.content_cache_time > 0:
-                # We do this in two steps because our redis clients disagree on
-                # what SETEX should look like.
-                yield self.extract_redis.set(key, extract.to_json())
-                yield self.extract_redis.expire(key, self.content_cache_time)
+            # We do this in two steps because our redis clients disagree on
+            # what SETEX should look like.
+            yield self.extract_redis.set(key, extract.to_json())
+            yield self.extract_redis.expire(key, self.content_cache_time)
         else:
             extract = ArticleExtract.from_json(data)
         returnValue(extract)
+
+    def get_extract(self, title):
+        if self.content_cache_time > 0:
+            return self._get_cached_extract(title)
+        return self.wikipedia.get_extract(title)
 
     def _message_session_event(self, msg):
         # First, check for session parameters on the message.
@@ -246,16 +244,17 @@ class WikipediaWorker(ApplicationWorker):
         log.msg("Received: %s" % (msg.payload,))
         user_id = msg.user()
         session_event = self._message_session_event(msg)
+        session = yield self.load_session(user_id)
 
         if session_event == 'close':
-            if not self.incoming_sms_transport:
+            if ((not self.incoming_sms_transport)
+                    or (session and session['state'] != 'more')):
                 # Session closed, so clean up and don't reply.
                 yield self.session_manager.clear_session(user_id)
             # We never want to respond to close messages, even if we keep the
             # session alive for the "more" handling.
             return
 
-        session = yield self.load_session(user_id)
         if (not session) or (session['state'] == 'more'):
             # If we have no session data, treat this as 'new' even if it isn't.
             # Also, new USSD search overrides old "more content" session.
