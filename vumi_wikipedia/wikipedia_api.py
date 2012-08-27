@@ -84,7 +84,7 @@ class ArticleSection(object):
         self._subsections = []
 
     def add_subsection(self, subsection):
-        if subsection.level < self.level - 1:
+        if subsection.level > self.level + 1:
             if self._subsections:
                 self._subsections[-1].add_subsection(subsection)
                 return
@@ -93,6 +93,9 @@ class ArticleSection(object):
     def get_subsections(self):
         # Return a shallow copy to avoid accidental mutation.
         return self._subsections[:]
+
+    def __repr__(self):
+        return '<%s: %r (%s)>' % (type(self).__name__, self.title, self.level)
 
     def full_text(self):
         text = self.text
