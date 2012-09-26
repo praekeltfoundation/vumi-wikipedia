@@ -25,7 +25,7 @@ def long_ascii(bits=50, suffix=u''):
 
 
 def long_unicode(bits=50, suffix=u''):
-    return u' '.join([u'\u044d\u0442\u043e'] * bits) + suffix
+    return u' '.join([UNI_BIT] * bits) + suffix
 
 
 class ContentFormatterTestCase(TestCase):
