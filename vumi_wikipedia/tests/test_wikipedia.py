@@ -3,6 +3,7 @@
 from twisted.internet.defer import inlineCallbacks
 
 from vumi.application.tests.test_base import ApplicationTestCase
+from vumi.message import TransportUserMessage
 
 from vumi_wikipedia.wikipedia import WikipediaWorker
 from vumi_wikipedia.tests.test_wikipedia_api import (
@@ -74,8 +75,8 @@ class WikipediaWorkerTestCase(ApplicationTestCase, FakeHTTPTestCaseMixin):
         self.worker = yield self.get_application(config)
 
     @inlineCallbacks
-    def assert_response(self, text, expected):
-        yield self.dispatch(self.mkmsg_in(text))
+    def assert_response(self, text, expected, session_event=None):
+        yield self.dispatch(self.mkmsg_in(text, session_event=session_event))
         self.assertEqual(expected,
                          self.get_dispatched_messages()[-1]['content'])
 
@@ -244,3 +245,56 @@ class WikipediaWorkerTestCase(ApplicationTestCase, FakeHTTPTestCaseMixin):
 
         yield self.start_session()
         yield self.assert_response('cthulhu', CTHULHU_RESULTS)
+
+    @inlineCallbacks
+    def test_no_content_cache(self):
+        yield self.replace_application({
+                'transport_name': self.transport_name,
+                'worker_name': 'wikitest',
+                'sms_transport': 'sphex_sms',
+                'api_url': self.url,
+                'incoming_sms_transport': 'sphex_more',
+                'content_cache_time': 0,
+                })
+
+        # Ensure an exception if `extract_redis` is used anywhere.
+        self.worker.extract_redis = None
+
+        yield self.start_session()
+        yield self.assert_response('cthulhu', CTHULHU_RESULTS)
+        yield self.assert_response('1', CTHULHU_SECTIONS)
+        yield self.assert_response('2', CTHULHU_USSD)
+
+        [sms_msg] = self._amqp.get_messages('vumi', 'sphex_sms.outbound')
+        self.assertEqual(CTHULHU_SMS, sms_msg['content'])
+        self.assertEqual('+41791234567', sms_msg['to_addr'])
+
+    @inlineCallbacks
+    def test_session_events(self):
+        close_session = lambda: self.dispatch(self.mkmsg_in(
+                None, session_event=TransportUserMessage.SESSION_CLOSE))
+        start_session = lambda: self.assert_response(
+            None, 'What would you like to search Wikipedia for?',
+            session_event=TransportUserMessage.SESSION_NEW)
+        assert_response = lambda txt, rsp: self.assert_response(
+            txt, rsp, session_event=TransportUserMessage.SESSION_RESUME)
+
+        yield start_session()
+        yield assert_response('cthulhu', CTHULHU_RESULTS)
+
+        session = yield self.worker.load_session('+41791234567')
+        self.assertEqual('sections', session['state'])
+        yield close_session()
+        session = yield self.worker.load_session('+41791234567')
+        self.assertEqual({}, session)
+
+        yield start_session()
+        yield assert_response('cthulhu', CTHULHU_RESULTS)
+        yield assert_response('1', CTHULHU_SECTIONS)
+        yield assert_response('2', CTHULHU_USSD)
+
+        session = yield self.worker.load_session('+41791234567')
+        self.assertEqual('more', session['state'])
+        yield close_session()
+        session = yield self.worker.load_session('+41791234567')
+        self.assertEqual('more', session['state'])

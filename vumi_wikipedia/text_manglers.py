@@ -4,12 +4,6 @@ import unicodedata
 import re
 
 
-def mangle_text(text, manglers=()):
-    for mangler in manglers:
-        text = mangler(text)
-    return text
-
-
 def unicode_ord(name):
     return ord(unicodedata.lookup(name))
 
@@ -73,9 +67,9 @@ class ContentFormatter(object):
             return ((len(text) - extra_len), text + no_more)
 
         # It doesn't all fit, so we need ellipsis and `more`
-        return self.format(text, more, extra_len)
+        return self._format(text, more, extra_len)
 
-    def format(self, content, postfix=u'', extra_len=0):
+    def _format(self, content, postfix, extra_len):
         text = content
 
         if len(text) <= self.get_limit(text, len(postfix)):
@@ -94,24 +88,5 @@ class ContentFormatter(object):
 
         return ((len(text) - extra_len), text + postfix)
 
-
-def truncate_sms(string, ascii_limit=160, unicode_limit=70, ellipsis=u'...'):
-    """Smart string truncation
-    """
-    result = u''
-    for word in string.split(' '):
-        longer_string = (result + ' ' + word).strip()
-        if (((is_unicode(longer_string) and len(longer_string) > unicode_limit)
-             or (len(longer_string) > ascii_limit))):
-                return result + ellipsis
-        result = longer_string
-    return result
-
-
-def truncate_sms_with_postfix(string, postfix, ascii_limit=160,
-                              unicode_limit=70, ellipsis=u'...'):
-        length = len(postfix)
-        if is_unicode(postfix):
-            ascii_limit = unicode_limit
-        return truncate_sms(string, ascii_limit - length,
-            unicode_limit - length, ellipsis) + postfix
+    def format(self, content, postfix=u''):
+        return self._format(content, postfix, 0)[1]
