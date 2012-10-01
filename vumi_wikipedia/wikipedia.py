@@ -172,7 +172,7 @@ class WikipediaWorker(ApplicationWorker):
             return
 
         self.metrics = yield self.start_publisher(
-            MetricManager, self.metrics_prefix)
+            MetricManager, self.metrics_prefix + '.')
 
         metrics = [
             'ussd_session_start',
@@ -185,6 +185,7 @@ class WikipediaWorker(ApplicationWorker):
             'ussd_session_content',
             'sms_more_content_reply',
             'sms_more_content_reply.extra',
+            'ussd_session_error',
             ]
         for i in range(1, 10):
             metrics.extend([templ % i for templ in [
@@ -318,6 +319,7 @@ class WikipediaWorker(ApplicationWorker):
             yield self.handle_session_result(user_id, session)
         except:
             log.err()
+            self.fire_metric('ussd_session_error')
             self.reply_to(
                 msg, 'Sorry, there was an error processing your request. '
                 'Please try again later.', False)
@@ -387,7 +389,7 @@ class WikipediaWorker(ApplicationWorker):
         self.fire_metric('ussd_session_sections')
         sections = json.loads(session['results'])
         selection = self.select_option(sections, msg,
-                                       metric_prefix='ussd_session_results')
+                                       metric_prefix='ussd_session_sections')
         if not selection:
             session['state'] = None
             returnValue(session)

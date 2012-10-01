@@ -1,5 +1,7 @@
 """Tests for vumi.demos.wikipedia."""
 
+import json
+
 from twisted.internet.defer import inlineCallbacks
 
 from vumi.application.tests.test_base import ApplicationTestCase
@@ -81,6 +83,19 @@ class WikipediaWorkerTestCase(ApplicationTestCase, FakeHTTPTestCaseMixin):
         self.assertEqual(expected,
                          self.get_dispatched_messages()[-1]['content'])
 
+    @inlineCallbacks
+    def assert_metrics(self, expected_metrics):
+        self.worker.metrics._publish_metrics()
+        yield self._amqp.kick_delivery()
+        [msg] = self._amqp.dispatched['vumi.metrics']['vumi.metrics']
+        metrics = {}
+        prefix_len = len(self.worker.config['metrics_prefix']) + 1
+        for name, _, points in json.loads(msg.body)['datapoints']:
+            val = sum(v for ts, v in points)
+            if val > 0:
+                metrics[name[prefix_len:]] = val
+        self.assertEqual(expected_metrics, metrics)
+
     def start_session(self):
         return self.assert_response(
             None, 'What would you like to search Wikipedia for?')
@@ -108,6 +123,26 @@ class WikipediaWorkerTestCase(ApplicationTestCase, FakeHTTPTestCaseMixin):
         [sms_msg] = self._amqp.get_messages('vumi', 'sphex_sms.outbound')
         self.assertEqual(CTHULHU_SMS, sms_msg['content'])
         self.assertEqual('+41791234567', sms_msg['to_addr'])
+        yield self.assert_metrics({
+                'ussd_session_start': 1,
+                'ussd_session_search': 1,
+                'ussd_session_results': 1,
+                'ussd_session_results.1': 1,
+                'ussd_session_sections': 1,
+                'ussd_session_sections.2': 1,
+                'ussd_session_content': 1,
+                })
+
+    @inlineCallbacks
+    def test_no_metrics_prefix(self):
+        yield self.replace_application({
+                'transport_name': self.transport_name,
+                'worker_name': 'wikitest',
+                'api_url': self.url,
+                })
+        self.worker.fire_metric('foo')
+        # Make sure it's safe to fire a metric when we aren't collecting them.
+        self.assertEqual(self.worker.metrics, None)
 
     @inlineCallbacks
     def test_no_sms_transport(self):
@@ -115,6 +150,7 @@ class WikipediaWorkerTestCase(ApplicationTestCase, FakeHTTPTestCaseMixin):
                 'transport_name': self.transport_name,
                 'worker_name': 'wikitest',
                 'api_url': self.url,
+                'metrics_prefix': 'test.metrics.wikipedia',
                 })
 
         yield self.start_session()
@@ -124,6 +160,15 @@ class WikipediaWorkerTestCase(ApplicationTestCase, FakeHTTPTestCaseMixin):
 
         self.assertEqual(
             [], self._amqp.get_messages('vumi', 'sphex_sms.outbound'))
+        yield self.assert_metrics({
+                'ussd_session_start': 1,
+                'ussd_session_search': 1,
+                'ussd_session_results': 1,
+                'ussd_session_results.1': 1,
+                'ussd_session_sections': 1,
+                'ussd_session_sections.2': 1,
+                'ussd_session_content': 1,
+                })
 
     @inlineCallbacks
     def test_sms_override(self):
@@ -150,6 +195,12 @@ class WikipediaWorkerTestCase(ApplicationTestCase, FakeHTTPTestCaseMixin):
         yield self.assert_response('cthulhu', CTHULHU_RESULTS)
         yield self.assert_response(
             'six', 'Sorry, invalid selection. Please restart and try again')
+        yield self.assert_metrics({
+                'ussd_session_start': 1,
+                'ussd_session_search': 1,
+                'ussd_session_results': 1,
+                'ussd_session_results.invalid': 1,
+                })
 
     @inlineCallbacks
     def test_invalid_selection_bad_index(self):
@@ -157,6 +208,12 @@ class WikipediaWorkerTestCase(ApplicationTestCase, FakeHTTPTestCaseMixin):
         yield self.assert_response('cthulhu', CTHULHU_RESULTS)
         yield self.assert_response(
             '8', 'Sorry, invalid selection. Please restart and try again')
+        yield self.assert_metrics({
+                'ussd_session_start': 1,
+                'ussd_session_search': 1,
+                'ussd_session_results': 1,
+                'ussd_session_results.invalid': 1,
+                })
 
     @inlineCallbacks
     def test_invalid_selection_later(self):
@@ -165,6 +222,14 @@ class WikipediaWorkerTestCase(ApplicationTestCase, FakeHTTPTestCaseMixin):
         yield self.assert_response('1', CTHULHU_SECTIONS)
         yield self.assert_response(
             'Hastur', 'Sorry, invalid selection. Please restart and try again')
+        yield self.assert_metrics({
+                'ussd_session_start': 1,
+                'ussd_session_search': 1,
+                'ussd_session_results': 1,
+                'ussd_session_results.1': 1,
+                'ussd_session_sections': 1,
+                'ussd_session_sections.invalid': 1,
+                })
 
     @inlineCallbacks
     def test_search_no_results(self):
@@ -172,6 +237,11 @@ class WikipediaWorkerTestCase(ApplicationTestCase, FakeHTTPTestCaseMixin):
         yield self.assert_response(
             'ncdkiuagdqpowebjkcs',
             'Sorry, no Wikipedia results for ncdkiuagdqpowebjkcs')
+        yield self.assert_metrics({
+                'ussd_session_start': 1,
+                'ussd_session_search': 1,
+                'ussd_session_search.no_results': 1,
+                })
 
     @inlineCallbacks
     def test_search_error(self):
@@ -180,6 +250,11 @@ class WikipediaWorkerTestCase(ApplicationTestCase, FakeHTTPTestCaseMixin):
             '.', ('Sorry, there was an error processing your request. Please '
                   'try ' 'again later.'))
         self.flushLoggedErrors()
+        yield self.assert_metrics({
+                'ussd_session_start': 1,
+                'ussd_session_search': 1,
+                'ussd_session_error': 1,
+                })
 
     @inlineCallbacks
     def test_config_knobs(self):
@@ -228,6 +303,24 @@ class WikipediaWorkerTestCase(ApplicationTestCase, FakeHTTPTestCaseMixin):
 
         self.assertEqual(CTHULHU_END, sms[-1]['content'])
         self.assertEqual('+41791234567', sms[-1]['to_addr'])
+        yield self.assert_metrics({
+                'ussd_session_start': 1,
+                'ussd_session_search': 1,
+                'ussd_session_results': 1,
+                'ussd_session_results.1': 1,
+                'ussd_session_sections': 1,
+                'ussd_session_sections.2': 1,
+                'ussd_session_content': 1,
+                'sms_more_content_reply': 8,
+                'sms_more_content_reply.1': 1,
+                'sms_more_content_reply.2': 1,
+                'sms_more_content_reply.3': 1,
+                'sms_more_content_reply.4': 1,
+                'sms_more_content_reply.5': 1,
+                'sms_more_content_reply.6': 1,
+                'sms_more_content_reply.7': 1,
+                'sms_more_content_reply.8': 1,
+                })
 
     @inlineCallbacks
     def test_more_then_new(self):
@@ -246,6 +339,17 @@ class WikipediaWorkerTestCase(ApplicationTestCase, FakeHTTPTestCaseMixin):
 
         yield self.start_session()
         yield self.assert_response('cthulhu', CTHULHU_RESULTS)
+        yield self.assert_metrics({
+                'ussd_session_start': 2,
+                'ussd_session_search': 2,
+                'ussd_session_results': 1,
+                'ussd_session_results.1': 1,
+                'ussd_session_sections': 1,
+                'ussd_session_sections.2': 1,
+                'ussd_session_content': 1,
+                'sms_more_content_reply': 1,
+                'sms_more_content_reply.1': 1,
+                })
 
     @inlineCallbacks
     def test_no_content_cache(self):
@@ -299,3 +403,12 @@ class WikipediaWorkerTestCase(ApplicationTestCase, FakeHTTPTestCaseMixin):
         yield close_session()
         session = yield self.worker.load_session('+41791234567')
         self.assertEqual('more', session['state'])
+        yield self.assert_metrics({
+                'ussd_session_start': 2,
+                'ussd_session_search': 2,
+                'ussd_session_results': 1,
+                'ussd_session_results.1': 1,
+                'ussd_session_sections': 1,
+                'ussd_session_sections.2': 1,
+                'ussd_session_content': 1,
+                })
