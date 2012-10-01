@@ -64,6 +64,7 @@ class WikipediaWorkerTestCase(ApplicationTestCase, FakeHTTPTestCaseMixin):
                 'sms_transport': 'sphex_sms',
                 'api_url': self.url,
                 'incoming_sms_transport': 'sphex_more',
+                'metrics_prefix': 'test.metrics.wikipedia',
                 })
         self.wikipedia = self.worker.wikipedia
 
