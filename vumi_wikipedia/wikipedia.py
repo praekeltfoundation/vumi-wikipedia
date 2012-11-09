@@ -8,6 +8,7 @@ from vumi.application import ApplicationWorker
 from vumi.persist.txredis_manager import TxRedisManager
 from vumi.components.session import SessionManager
 from vumi.message import TransportUserMessage
+from vumi.blinkenlights.metrics import MetricManager, Count
 
 from vumi_wikipedia.wikipedia_api import WikipediaAPI, ArticleExtract
 from vumi_wikipedia.text_manglers import normalize_whitespace, ContentFormatter
@@ -80,6 +81,9 @@ class WikipediaWorker(ApplicationWorker):
     no_more_content_postfix : str, optional
         Postfix for SMS content that is complete. Ignored if
         `incoming_sms_transport` is not set. Defaults to ' (end of section)'
+
+    metrics_prefix : str, optional
+        Prefix for metrics names. If unset, no metrics will be collected.
     """
 
     MAX_USSD_SESSION_LENGTH = 3 * 60
@@ -132,8 +136,11 @@ class WikipediaWorker(ApplicationWorker):
             self.more_content_postfix = u''
             self.no_more_content_postfix = u''
 
+        self.metrics_prefix = self.config.get('metrics_prefix')
+
     @inlineCallbacks
     def setup_application(self):
+        yield self._setup_metrics()
         redis = yield TxRedisManager.from_config(
             self.config.get('redis_manager', {}))
         redis = redis.sub_manager(self.config['worker_name'])
@@ -159,6 +166,45 @@ class WikipediaWorker(ApplicationWorker):
             yield self._setup_sms_transport_consumer()
 
     @inlineCallbacks
+    def _setup_metrics(self):
+        if self.metrics_prefix is None:
+            self.metrics = None
+            return
+
+        self.metrics = yield self.start_publisher(
+            MetricManager, self.metrics_prefix + '.')
+
+        metrics = [
+            'ussd_session_start',
+            'ussd_session_search',
+            'ussd_session_search.no_results',
+            'ussd_session_results',
+            'ussd_session_results.invalid',
+            'ussd_session_sections',
+            'ussd_session_sections.invalid',
+            'ussd_session_content',
+            'sms_more_content_reply',
+            'sms_more_content_reply.extra',
+            'ussd_session_error',
+            ]
+        for i in range(1, 10):
+            metrics.extend([templ % i for templ in [
+                        'ussd_session_results.%s',
+                        'ussd_session_sections.%s',
+                        'sms_more_content_reply.%s',
+                        ]])
+        for metric in metrics:
+            self.metrics.register(Count(metric))
+
+    def fire_metric(self, metric_name, metric_suffix=None, value=1):
+        if self.metrics is None or metric_name is None:
+            return
+        if metric_suffix is not None:
+            metric_name = '%s.%s' % (metric_name, metric_suffix)
+        self.metrics[metric_name].set(value)
+        pass
+
+    @inlineCallbacks
     def _setup_sms_transport_consumer(self):
         self.sms_transport_consumer = yield self.consume(
             '%(incoming_sms_transport)s.inbound' % self.config,
@@ -166,8 +212,11 @@ class WikipediaWorker(ApplicationWorker):
             message_class=TransportUserMessage)
         self._consumers.append(self.sms_transport_consumer)
 
+    @inlineCallbacks
     def teardown_application(self):
-        return self.session_manager.stop()
+        yield self.session_manager.stop()
+        if self.metrics is not None:
+            yield self.metrics.stop()
 
     def make_options(self, options, prefix='', start=1):
         """
@@ -270,12 +319,14 @@ class WikipediaWorker(ApplicationWorker):
             yield self.handle_session_result(user_id, session)
         except:
             log.err()
+            self.fire_metric('ussd_session_error')
             self.reply_to(
                 msg, 'Sorry, there was an error processing your request. '
                 'Please try again later.', False)
             yield self.session_manager.clear_session(user_id)
 
     def process_message_new(self, msg, session):
+        self.fire_metric('ussd_session_start')
         self.reply_to(
             msg, "What would you like to search Wikipedia for?", True)
         session['state'] = 'searching'
@@ -283,6 +334,7 @@ class WikipediaWorker(ApplicationWorker):
 
     @inlineCallbacks
     def process_message_searching(self, msg, session):
+        self.fire_metric('ussd_session_search')
         query = msg['content'].strip()
 
         results = yield self.wikipedia.search(query)
@@ -292,19 +344,23 @@ class WikipediaWorker(ApplicationWorker):
             self.reply_to(msg, msgcontent, True)
             session['state'] = 'sections'
         else:
+            self.fire_metric('ussd_session_search.no_results')
             self.reply_to(
                 msg, 'Sorry, no Wikipedia results for %s' % query, False)
             session['state'] = None
         returnValue(session)
 
-    def select_option(self, options, msg):
+    def select_option(self, options, msg, metric_prefix=None):
         response = msg['content'].strip()
 
         if response.isdigit():
             try:
-                return options[int(response) - 1]
+                result = options[int(response) - 1]
+                self.fire_metric(metric_prefix, int(response))
+                return result
             except (KeyError, IndexError):
                 pass
+        self.fire_metric(metric_prefix, 'invalid')
         self.reply_to(msg,
                       'Sorry, invalid selection. Please restart and try again',
                       False)
@@ -312,7 +368,9 @@ class WikipediaWorker(ApplicationWorker):
 
     @inlineCallbacks
     def process_message_sections(self, msg, session):
-        selection = self.select_option(json.loads(session['results']), msg)
+        self.fire_metric('ussd_session_results')
+        selection = self.select_option(json.loads(session['results']), msg,
+                                       metric_prefix='ussd_session_results')
         if not selection:
             session['state'] = None
             returnValue(session)
@@ -328,8 +386,10 @@ class WikipediaWorker(ApplicationWorker):
 
     @inlineCallbacks
     def process_message_content(self, msg, session):
+        self.fire_metric('ussd_session_sections')
         sections = json.loads(session['results'])
-        selection = self.select_option(sections, msg)
+        selection = self.select_option(sections, msg,
+                                       metric_prefix='ussd_session_sections')
         if not selection:
             session['state'] = None
             returnValue(session)
@@ -340,6 +400,7 @@ class WikipediaWorker(ApplicationWorker):
         session['sms_offset'] = 0
         ussd_cont = self.ussd_formatter.format(
             content, '\n(Full content sent by SMS.)')
+        self.fire_metric('ussd_session_content')
         self.reply_to(msg, ussd_cont, False)
         if self.sms_transport:
             session = yield self.send_sms_content(msg, session)
@@ -379,9 +440,17 @@ class WikipediaWorker(ApplicationWorker):
         user_id = msg.user()
 
         session = yield self.load_session(user_id)
+        self.fire_metric('sms_more_content_reply')
         if not session:
             # TODO: Reply with error?
+            self.fire_metric('sms_more_content_reply.no_content')
             return
+
+        more_messages = session.get('more_messages', 0) + 1
+        session['more_messages'] = more_messages
+        if more_messages > 9:
+            more_messages = 'extra'
+        self.fire_metric('sms_more_content_reply', more_messages)
 
         try:
             session = yield self.send_sms_content(msg, session)
