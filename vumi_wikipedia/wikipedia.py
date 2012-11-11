@@ -103,6 +103,15 @@ class WikipediaWorker(ApplicationWorker):
     MORE_CONTENT_POSTFIX = u' (reply for more)'
     NO_MORE_CONTENT_POSTFIX = u' (end of section)'
 
+    # Some message constants. These need to be translated at some point.
+    MSG_REQUEST_ERROR = (
+        'Sorry, there was an error processing your request. '
+        'Please try again later.')
+    MSG_SEARCH_PROMPT = 'What would you like to search Wikipedia for?'
+    MSG_NO_RESULTS = 'Sorry, no Wikipedia results for "%s".'
+    MSG_INVALID_SELECTION = (
+        'Sorry, invalid selection. Please restart and try again.')
+
     def _opt_config(self, name):
         return self.config.get(name, None)
 
@@ -451,15 +460,12 @@ class WikipediaWorker(ApplicationWorker):
         except:
             log.err()
             self.fire_metric('ussd_session_error')
-            self.reply_via('menu', msg,
-                           'Sorry, there was an error processing your '
-                           'request. Please try again later.', False)
+            self.reply_via('menu', msg, self.MSG_REQUEST_ERROR, False)
             yield self.session_manager.clear_session(user_id)
 
     def process_message_new(self, msg, session):
         self.fire_metric('ussd_session_start')
-        self.reply_via('menu', msg,
-                       "What would you like to search Wikipedia for?", True)
+        self.reply_via('menu', msg, self.MSG_SEARCH_PROMPT, True)
         session['state'] = 'searching'
         return session
 
@@ -476,8 +482,7 @@ class WikipediaWorker(ApplicationWorker):
             session['state'] = 'sections'
         else:
             self.fire_metric('ussd_session_search.no_results')
-            self.reply_via('menu', msg,
-                           'Sorry, no Wikipedia results for %s' % query, False)
+            self.reply_via('menu', msg, self.MSG_NO_RESULTS % (query,), False)
             session['state'] = None
         returnValue(session)
 
@@ -492,9 +497,7 @@ class WikipediaWorker(ApplicationWorker):
             except (KeyError, IndexError):
                 pass
         self.fire_metric(metric_prefix, 'invalid')
-        self.reply_via('menu', msg,
-                       'Sorry, invalid selection. Please restart and try '
-                       'again', False)
+        self.reply_via('menu', msg, self.MSG_INVALID_SELECTION, False)
         return None
 
     @inlineCallbacks

@@ -56,6 +56,8 @@ CTHULHU_END = (
 class WikipediaWorkerTestCase(ApplicationTestCase, FakeHTTPTestCaseMixin):
     application_class = WikipediaWorker
 
+    timeout = 1  # XXX: Remove
+
     @inlineCallbacks
     def setUp(self):
         yield super(WikipediaWorkerTestCase, self).setUp()
@@ -176,7 +178,7 @@ class WikipediaWorkerTestCase(ApplicationTestCase, FakeHTTPTestCaseMixin):
         yield self.start_session()
         yield self.assert_response('cthulhu', CTHULHU_RESULTS)
         yield self.assert_response(
-            'six', 'Sorry, invalid selection. Please restart and try again')
+            'six', 'Sorry, invalid selection. Please restart and try again.')
         yield self.assert_metrics({
                 'ussd_session_start': 1,
                 'ussd_session_search': 1,
@@ -189,7 +191,7 @@ class WikipediaWorkerTestCase(ApplicationTestCase, FakeHTTPTestCaseMixin):
         yield self.start_session()
         yield self.assert_response('cthulhu', CTHULHU_RESULTS)
         yield self.assert_response(
-            '8', 'Sorry, invalid selection. Please restart and try again')
+            '8', 'Sorry, invalid selection. Please restart and try again.')
         yield self.assert_metrics({
                 'ussd_session_start': 1,
                 'ussd_session_search': 1,
@@ -203,7 +205,8 @@ class WikipediaWorkerTestCase(ApplicationTestCase, FakeHTTPTestCaseMixin):
         yield self.assert_response('cthulhu', CTHULHU_RESULTS)
         yield self.assert_response('1', CTHULHU_SECTIONS)
         yield self.assert_response(
-            'Hastur', 'Sorry, invalid selection. Please restart and try again')
+            'Hastur',
+            'Sorry, invalid selection. Please restart and try again.')
         yield self.assert_metrics({
                 'ussd_session_start': 1,
                 'ussd_session_search': 1,
@@ -218,7 +221,7 @@ class WikipediaWorkerTestCase(ApplicationTestCase, FakeHTTPTestCaseMixin):
         yield self.start_session()
         yield self.assert_response(
             'ncdkiuagdqpowebjkcs',
-            'Sorry, no Wikipedia results for ncdkiuagdqpowebjkcs')
+            'Sorry, no Wikipedia results for "ncdkiuagdqpowebjkcs".')
         yield self.assert_metrics({
                 'ussd_session_start': 1,
                 'ussd_session_search': 1,
@@ -230,7 +233,7 @@ class WikipediaWorkerTestCase(ApplicationTestCase, FakeHTTPTestCaseMixin):
         yield self.start_session()
         yield self.assert_response(
             '.', ('Sorry, there was an error processing your request. Please '
-                  'try ' 'again later.'))
+                  'try again later.'))
         self.flushLoggedErrors()
         yield self.assert_metrics({
                 'ussd_session_start': 1,
