@@ -20,7 +20,19 @@ def mkmenu(options, prefix, start=1):
 
 
 class WikipediaWorker(ApplicationWorker):
-    """Look up Wikipedia content over USSD, deliver over USSD/SMS.
+    """Access MediaWiki content over SMS/USSD.
+
+    This application provides an interface to Wikipedia (or ant other MediaWiki
+    installation) over SMS and/or USSD.
+
+    When a USSD transport is provided, searching and article selection can be
+    done over USSD and article content is delivered over SMS.
+
+    When SMS search and menu transports are provided, searching and article
+    selection can be done over SMS.
+
+    At least one of the above mechanisms must be used, but using them together
+    in the same worker instance is also possible.
 
     TODO: Document which transport parameters need to be specified together,
     etc.
@@ -28,74 +40,92 @@ class WikipediaWorker(ApplicationWorker):
     Config parameters
     -----------------
 
-    ussd_transport : str, optional
+    :param str ussd_transport:
         If set, this specifies the USSD transport for searching Wikipedia.
+        (optional)
 
-    sms_search_transport : str, optional
+    :param str sms_search_transport:
         If set, this specifies the SMS transport for receiving search queries.
         No outbound messages will be sent over this transport.
+        (optional, but must be specified together with sms_menu_transport)
 
-    sms_menu_transport : str, optional
+    :param str sms_menu_transport:
         If set, this specifies the SMS transport to use for displaying menu
         options and receiving selection messages.
+        (optional, but must be specified together with sms_search_transport)
 
-    sms_content_transport : str
+    :param str sms_content_transport:
         SMS transport to use for sending article text and receiving requests
         for more content.
 
-    api_url : str, optional
+    :param str api_url:
         Alternate API URL to use. This can be any MediaWiki deployment,
-        although certain assumptions are made about the structure of articels
+        although certain assumptions are made about the structure of articles
         that may not be valid outside of Wikipedia.
+        (optional, defaults to the English Wikipedia API)
 
-    accept_gzip : bool, optional
+    :param bool accept_gzip:
         If `True`, the HTTP client will request gzipped responses. This is
         generally beneficial, although it requires Twisted 11.1 or later.
+        (optional, defaults to `False`)
 
-    user_agent : str, optional
+    :param str user_agent:
         Override `User-Agent` header on API requests.
+        (optional)
 
-    max_ussd_session_length : int, optional
-        Lifetime of USSD session in seconds. Defaults to 3 minutes. (If
-        `incoming_sms_transport` is set, this should be set to a longer time.)
+    :param int max_session_length:
+        Lifetime of the search session in seconds.
+        (optional, defaults to 10 minutes.)
 
-    content_cache_time : int, optional
-        Lifetime of cached article content in seconds. Defaults to 1 hour.
+    :param int content_cache_time:
+        Lifetime of cached article content in seconds. If set to 0, disables
+        content caching.
+        (optional, defaults to 0)
 
-    max_ussd_content_length : int, optional
-        Maximum character length of ASCII USSD content. Defaults to 160.
+    :param int max_ussd_content_length:
+        Maximum character length of ASCII USSD content.
+        (optional, defaults to 180)
 
-    max_ussd_unicode_length : int, optional
-        Maximum character length of unicode USSD content. Defaults to 70.
+    :param int max_ussd_unicode_length:
+        Maximum character length of unicode USSD content.
+        (optional, defaults to 90)
 
-    max_sms_content_length : int, optional
-        Maximum character length of ASCII SMS content. Defaults to 160.
+    :param int max_sms_content_length:
+        Maximum character length of ASCII SMS content. Recommended values are
+        160 for a single message or multiples of 150 for a multipart message.
+        (optional, defaults to 160)
 
-    max_sms_unicode_length : int, optional
-        Maximum character length of unicode SMS content. Defaults to 70.
+    :param int max_sms_unicode_length:
+        Maximum character length of unicode SMS content. Recommended values are
+        70 for a single message or multiples of 60 for a multipart message.
+        (optional, defaults to 70)
 
-    sentence_break_threshold : int, optional
+    :param int sentence_break_threshold:
         If a sentence break is found within this many characters of the end of
         the truncated message, truncate at the sentence break instead of a word
-        break. Defaults to 10.
+        break.
+        (optional, defaults to 10)
 
-    more_content_postfix : str, optional
-        Postfix for SMS content that can be continued. Ignored if
-        `incoming_sms_transport` is not set. Defaults to ' (reply for more)'
+    :param str more_content_postfix:
+        Postfix for SMS content that can be continued. If requests for more
+        content are unsupported, this should be set to an empty string.
+        (optional, defaults to ' (reply for more)')
 
-    no_more_content_postfix : str, optional
-        Postfix for SMS content that is complete. Ignored if
-        `incoming_sms_transport` is not set. Defaults to ' (end of section)'
+    :param str no_more_content_postfix:
+        Postfix for SMS content that is complete. If requests for more
+        content are unsupported, this should be set to an empty string.
+        (optional, defaults to ' (end of section)')
 
-    metrics_prefix : str, optional
+    :param str metrics_prefix:
         Prefix for metrics names. If unset, no metrics will be collected.
+        (optional)
     """
 
-    MAX_USSD_SESSION_LENGTH = 3 * 60
-    CONTENT_CACHE_TIME = 3600
+    MAX_SESSION_LENGTH = 600
+    CONTENT_CACHE_TIME = 0
 
-    MAX_USSD_CONTENT_LENGTH = 160
-    MAX_USSD_UNICODE_LENGTH = 70
+    MAX_USSD_CONTENT_LENGTH = 180
+    MAX_USSD_UNICODE_LENGTH = 90
     MAX_SMS_CONTENT_LENGTH = 160
     MAX_SMS_UNICODE_LENGTH = 70
     SENTENCE_BREAK_THRESHOLD = 10
@@ -139,8 +169,8 @@ class WikipediaWorker(ApplicationWorker):
         self.accept_gzip = self._opt_config('accept_gzip')
         self.user_agent = self._opt_config('user_agent')
 
-        self.max_ussd_session_length = self.config.get(
-            'max_ussd_session_length', self.MAX_USSD_SESSION_LENGTH)
+        self.max_session_length = self.config.get(
+            'max_session_length', self.MAX_SESSION_LENGTH)
         self.content_cache_time = self.config.get(
             'content_cache_time', self.CONTENT_CACHE_TIME)
 
@@ -254,7 +284,7 @@ class WikipediaWorker(ApplicationWorker):
 
         self.session_manager = SessionManager(
             redis.sub_manager('session'),
-            max_session_length=self.max_ussd_session_length)
+            max_session_length=self.max_session_length)
 
         self.wikipedia = WikipediaAPI(
             self.api_url, self.accept_gzip, self.user_agent)

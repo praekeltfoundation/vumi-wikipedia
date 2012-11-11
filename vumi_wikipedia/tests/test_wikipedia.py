@@ -19,6 +19,7 @@ CTHULHU_RESULTS = '\n'.join([
         u'4. Cthulhu (2000 film)',
         u'5. Cthulhu Mythos',
         u'6. The Call of Cthulhu',
+        u'7. Cthulhu Mythos anthology',
         ])
 
 CTHULHU_SECTIONS = '\n'.join([
@@ -30,8 +31,8 @@ CTHULHU_SECTIONS = '\n'.join([
 
 CTHULHU_USSD = (
     u'The first half of the principal manuscript told a very peculiar tale. '
-    u'It appears that on 1 March 1925, a thin, dark young man of ...\n(Full '
-    u'content sent by SMS.)')
+    u'It appears that on 1 March 1925, a thin, dark young man of neurotic and '
+    u'...\n(Full content sent by SMS.)')
 
 CTHULHU_SMS_NO_MORE = (
     u'The first half of the principal manuscript told a very peculiar tale. '
@@ -251,9 +252,9 @@ class WikipediaWorkerTestCase(ApplicationTestCase, FakeHTTPTestCaseMixin):
                 'api_url': 'https://localhost:1337/',
                 'accept_gzip': True,
                 'user_agent': 'Bob Howard',
-                'max_ussd_session_length': 200,
+                'max_session_length': 200,
                 'content_cache_time': 1800,
-                'max_ussd_content_length': 180,
+                'max_ussd_content_length': 160,
                 'max_ussd_unicode_length': 80,
                 'max_sms_content_length': 300,
                 'max_sms_unicode_length': 130,
@@ -262,10 +263,10 @@ class WikipediaWorkerTestCase(ApplicationTestCase, FakeHTTPTestCaseMixin):
         self.assert_config_knob('api_url', self.url, 'https://localhost:1337/')
         self.assert_config_knob('accept_gzip', None, True)
         self.assert_config_knob('user_agent', None, 'Bob Howard')
-        self.assert_config_knob('max_ussd_session_length', 180, 200)
-        self.assert_config_knob('content_cache_time', 3600, 1800)
-        self.assert_config_knob('max_ussd_content_length', 160, 180)
-        self.assert_config_knob('max_ussd_unicode_length', 70, 80)
+        self.assert_config_knob('max_session_length', 600, 200)
+        self.assert_config_knob('content_cache_time', 0, 1800)
+        self.assert_config_knob('max_ussd_content_length', 180, 160)
+        self.assert_config_knob('max_ussd_unicode_length', 90, 80)
         self.assert_config_knob('max_sms_content_length', 160, 300)
         self.assert_config_knob('max_sms_unicode_length', 70, 130)
 
