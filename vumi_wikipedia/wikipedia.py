@@ -3,11 +3,11 @@
 import json
 
 from twisted.internet.defer import inlineCallbacks, returnValue
-from twisted.python import log
+from vumi import log
 from vumi.application import ApplicationWorker
 from vumi.persist.txredis_manager import TxRedisManager
 from vumi.components.session import SessionManager
-from vumi.message import TransportUserMessage
+from vumi.message import TransportUserMessage, TransportEvent
 from vumi.blinkenlights.metrics import MetricManager, Count
 
 from vumi_wikipedia.wikipedia_api import WikipediaAPI, ArticleExtract
@@ -22,17 +22,26 @@ def mkmenu(options, prefix, start=1):
 class WikipediaWorker(ApplicationWorker):
     """Look up Wikipedia content over USSD, deliver over USSD/SMS.
 
+    TODO: Document which transport parameters need to be specified together,
+    etc.
+
     Config parameters
     -----------------
 
-    sms_transport : str, optional
-        If set, this specifies a different transport for sending SMS replies.
-        Otherwise the same transport will be used for both USSD and SMS.
+    ussd_transport : str, optional
+        If set, this specifies the USSD transport for searching Wikipedia.
 
-    override_sms_address : str, optional
-        If set, this overrides the `to_addr` for SMS replies. This is useful
-        for demos where a fake USSD transport is being used but real SMS
-        replies are desired.
+    sms_search_transport : str, optional
+        If set, this specifies the SMS transport for receiving search queries.
+        No outbound messages will be sent over this transport.
+
+    sms_menu_transport : str, optional
+        If set, this specifies the SMS transport to use for displaying menu
+        options and receiving selection messages.
+
+    sms_content_transport : str
+        SMS transport to use for sending article text and receiving requests
+        for more content.
 
     api_url : str, optional
         Alternate API URL to use. This can be any MediaWiki deployment,
@@ -45,10 +54,6 @@ class WikipediaWorker(ApplicationWorker):
 
     user_agent : str, optional
         Override `User-Agent` header on API requests.
-
-    incoming_sms_transport : str, optional
-        If set, this specifies a different transport for receiving "more
-        content" SMS messages. If unset, incoming SMS messages will be ignored.
 
     max_ussd_session_length : int, optional
         Lifetime of USSD session in seconds. Defaults to 3 minutes. (If
@@ -101,11 +106,25 @@ class WikipediaWorker(ApplicationWorker):
     def _opt_config(self, name):
         return self.config.get(name, None)
 
+    # We don't use the standard `transport_name` config here, because our
+    # transport setup is more complicated than that.
+    # TODO: Maybe find a better way to do this?
+
+    def _validate_config(self):
+        # Override the default config stuff, because we don't use
+        # `transport_name`
+        if 'transport_name' in self.config:
+            log.warning("This application is strange and doesn't use a "
+                        "'transport_name' config.")
+        return self.validate_config()
+
     def validate_config(self):
-        self.sms_transport = self._opt_config('sms_transport')
-        self.incoming_sms_transport = self._opt_config(
-            'incoming_sms_transport')
-        self.override_sms_address = self._opt_config('override_sms_address')
+        # Transport names
+        self.ussd_transport = self._opt_config('ussd_transport')
+        self.sms_search_transport = self._opt_config('sms_search_transport')
+        self.sms_menu_transport = self._opt_config('sms_menu_transport')
+        self.sms_content_transport = self._opt_config('sms_content_transport')
+        # TODO: Validate transport combinations.
 
         self.api_url = self._opt_config('api_url')
         self.accept_gzip = self._opt_config('accept_gzip')
@@ -127,16 +146,93 @@ class WikipediaWorker(ApplicationWorker):
         self.sentence_break_threshold = self.config.get(
             'sentence_break_threshold', self.SENTENCE_BREAK_THRESHOLD)
 
-        if self.incoming_sms_transport:
-            self.more_content_postfix = self.config.get(
+        self.more_content_postfix = self.config.get(
                 'more_content_postfix', self.MORE_CONTENT_POSTFIX)
-            self.no_more_content_postfix = self.config.get(
+        self.no_more_content_postfix = self.config.get(
                 'no_more_content_postfix', self.NO_MORE_CONTENT_POSTFIX)
-        else:
-            self.more_content_postfix = u''
-            self.no_more_content_postfix = u''
 
         self.metrics_prefix = self.config.get('metrics_prefix')
+
+    @inlineCallbacks
+    def _setup_transport_publisher(self):
+        # We override this to set up our own complicated transports
+        if self.ussd_transport is not None:
+            # For USSD
+            self.ussd_transport_publisher = yield self.publish_to(
+                '%s.outbound' % (self.ussd_transport,))
+
+        if self.sms_search_transport is not None:
+            # For SMS
+            self.sms_search_transport_publisher = yield self.publish_to(
+                '%s.outbound' % (self.sms_search_transport,))
+            self.sms_menu_transport_publisher = yield self.publish_to(
+                '%s.outbound' % (self.sms_menu_transport,))
+
+        # For both
+        self.sms_content_transport_publisher = yield self.publish_to(
+            '%s.outbound' % (self.sms_content_transport,))
+
+    @inlineCallbacks
+    def _setup_transport_consumer(self):
+        # We override this to set up our own complicated transports
+        if self.ussd_transport is not None:
+            # For USSD
+            self.ussd_transport_consumer = yield self.consume(
+                '%s.inbound' % (self.ussd_transport,),
+                self.consume_ussd_message,
+                message_class=TransportUserMessage)
+            self._consumers.append(self.ussd_transport_consumer)
+
+        if self.sms_search_transport is not None:
+            # For SMS
+            self.sms_search_transport_consumer = yield self.consume(
+                '%s.inbound' % (self.sms_search_transport,),
+                self.consume_sms_search_message,
+                message_class=TransportUserMessage)
+            self._consumers.append(self.sms_search_transport_consumer)
+            self.sms_menu_transport_consumer = yield self.consume(
+                '%s.inbound' % (self.sms_menu_transport,),
+                self.consume_sms_menu_message,
+                message_class=TransportUserMessage)
+            self._consumers.append(self.sms_menu_transport_consumer)
+
+        # For both
+        self.sms_content_transport_consumer = yield self.consume(
+            '%s.inbound' % (self.sms_content_transport,),
+            self.consume_sms_content_message,
+            message_class=TransportUserMessage)
+        self._consumers.append(self.sms_content_transport_consumer)
+
+    @inlineCallbacks
+    def _setup_event_consumer(self):
+        # We override this to set up our own complicated transports
+        if self.ussd_transport is not None:
+            # For USSD
+            self.ussd_transport_event_consumer = yield self.consume(
+                '%s.inbound' % (self.ussd_transport,),
+                self.consume_ussd_event,
+                message_class=TransportEvent)
+            self._consumers.append(self.ussd_transport_event_consumer)
+
+        if self.sms_search_transport is not None:
+            # For SMS
+            self.sms_search_transport_event_consumer = yield self.consume(
+                '%s.inbound' % (self.sms_search_transport,),
+                self.consume_sms_search_event,
+                message_class=TransportEvent)
+            self._consumers.append(self.sms_search_transport_event_consumer)
+            self.sms_menu_transport_event_consumer = yield self.consume(
+                '%s.inbound' % (self.sms_menu_transport,),
+                self.consume_sms_menu_event,
+                message_class=TransportEvent)
+            self._consumers.append(self.sms_menu_transport_event_consumer)
+
+        # For both
+        self.sms_content_transport_event_consumer = yield self.consume(
+            '%s.inbound' % (self.sms_content_transport,),
+            self.consume_sms_content_event,
+            message_class=TransportEvent)
+        self._consumers.append(self.sms_content_transport_event_consumer)
 
     @inlineCallbacks
     def setup_application(self):
@@ -161,9 +257,6 @@ class WikipediaWorker(ApplicationWorker):
         self.sms_formatter = ContentFormatter(
             self.max_sms_content_length, self.max_sms_unicode_length,
             sentence_break_threshold=self.sentence_break_threshold)
-
-        if self.incoming_sms_transport:
-            yield self._setup_sms_transport_consumer()
 
     @inlineCallbacks
     def _setup_metrics(self):
@@ -203,14 +296,6 @@ class WikipediaWorker(ApplicationWorker):
             metric_name = '%s.%s' % (metric_name, metric_suffix)
         self.metrics[metric_name].set(value)
         pass
-
-    @inlineCallbacks
-    def _setup_sms_transport_consumer(self):
-        self.sms_transport_consumer = yield self.consume(
-            '%(incoming_sms_transport)s.inbound' % self.config,
-            self.consume_sms_message,
-            message_class=TransportUserMessage)
-        self._consumers.append(self.sms_transport_consumer)
 
     @inlineCallbacks
     def teardown_application(self):
@@ -265,10 +350,6 @@ class WikipediaWorker(ApplicationWorker):
 
         return 'resume'
 
-    def close_session(self, msg):
-        # We handle all of this in consume_user_message.
-        return self.consume_user_message(msg)
-
     @inlineCallbacks
     def handle_session_result(self, user_id, session):
         if session['state'] is None:
@@ -288,16 +369,42 @@ class WikipediaWorker(ApplicationWorker):
             session = dict((k, json.dumps(v)) for k, v in session.items())
             return self.session_manager.save_session(user_id, session)
 
+    def consume_sms_search_message(self, msg):
+        raise NotImplementedError()
+
+    def consume_sms_menu_message(self, msg):
+        raise NotImplementedError()
+
+    def consume_sms_content_message(self, msg):
+        return self.consume_sms_message(msg)
+
+    def consume_ussd_event(self, msg):
+        raise NotImplementedError()
+
+    def consume_sms_search_event(self, msg):
+        raise NotImplementedError()
+
+    def consume_sms_menu_event(self, msg):
+        raise NotImplementedError()
+
+    def consume_sms_content_event(self, msg):
+        raise NotImplementedError()
+
+    def reply_to(self, original_message, content, continue_session=True,
+                 **kws):
+        reply = original_message.reply(content, continue_session, **kws)
+        # FIXME: Use the right transport here!
+        return self.ussd_transport_publisher.publish_message(reply)
+
     @inlineCallbacks
-    def consume_user_message(self, msg):
+    def consume_ussd_message(self, msg):
         log.msg("Received: %s" % (msg.payload,))
         user_id = msg.user()
         session_event = self._message_session_event(msg)
         session = yield self.load_session(user_id)
 
         if session_event == 'close':
-            if ((not self.incoming_sms_transport)
-                    or (session and session['state'] != 'more')):
+            if (session and session['state'] != 'more'):
                 # Session closed, so clean up and don't reply.
                 yield self.session_manager.clear_session(user_id)
             # We never want to respond to close messages, even if we keep the
@@ -402,15 +509,12 @@ class WikipediaWorker(ApplicationWorker):
             content, '\n(Full content sent by SMS.)')
         self.fire_metric('ussd_session_content')
         self.reply_to(msg, ussd_cont, False)
-        if self.sms_transport:
-            session = yield self.send_sms_content(msg, session)
-        if self.incoming_sms_transport is None:
-            session['state'] = None
-        else:
-            session['state'] = 'more'
+        session = yield self.send_sms_content(msg, session)
+        session['state'] = 'more'
         returnValue(session)
 
     def send_sms_content(self, msg, session):
+        # TODO: Make this less hacky.
         content_len, sms_content = self.sms_formatter.format_more(
             session['sms_content'], session['sms_offset'],
             self.more_content_postfix, self.no_more_content_postfix)
@@ -419,12 +523,9 @@ class WikipediaWorker(ApplicationWorker):
             session['state'] = None
 
         bmsg = msg.reply(sms_content)
-        bmsg['transport_name'] = self.sms_transport
+        bmsg['transport_name'] = self.sms_content_transport
         bmsg['transport_type'] = 'sms'
-        if self.override_sms_address:
-            bmsg['to_addr'] = self.override_sms_address
-        self.transport_publisher.publish_message(
-            bmsg, routing_key='%s.outbound' % (self.sms_transport,))
+        self.sms_content_transport_publisher.publish_message(bmsg)
 
         return session
 

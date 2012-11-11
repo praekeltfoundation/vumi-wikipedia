@@ -61,11 +61,10 @@ class WikipediaWorkerTestCase(ApplicationTestCase, FakeHTTPTestCaseMixin):
         yield super(WikipediaWorkerTestCase, self).setUp()
         yield self.start_webserver(WIKIPEDIA_RESPONSES)
         self.worker = yield self.get_application({
-                'transport_name': self.transport_name,
+                'ussd_transport': self.transport_name,
+                'sms_content_transport': 'sphex_sms',
                 'worker_name': 'wikitest',
-                'sms_transport': 'sphex_sms',
                 'api_url': self.url,
-                'incoming_sms_transport': 'sphex_more',
                 'metrics_prefix': 'test.metrics.wikipedia',
                 })
         self.wikipedia = self.worker.wikipedia
@@ -136,7 +135,8 @@ class WikipediaWorkerTestCase(ApplicationTestCase, FakeHTTPTestCaseMixin):
     @inlineCallbacks
     def test_no_metrics_prefix(self):
         yield self.replace_application({
-                'transport_name': self.transport_name,
+                'ussd_transport': self.transport_name,
+                'sms_content_transport': 'sphex_sms',
                 'worker_name': 'wikitest',
                 'api_url': self.url,
                 })
@@ -144,50 +144,32 @@ class WikipediaWorkerTestCase(ApplicationTestCase, FakeHTTPTestCaseMixin):
         # Make sure it's safe to fire a metric when we aren't collecting them.
         self.assertEqual(self.worker.metrics, None)
 
-    @inlineCallbacks
-    def test_no_sms_transport(self):
-        yield self.replace_application({
-                'transport_name': self.transport_name,
-                'worker_name': 'wikitest',
-                'api_url': self.url,
-                'metrics_prefix': 'test.metrics.wikipedia',
-                })
+    # @inlineCallbacks
+    # def test_no_sms_transport(self):
+    #     yield self.replace_application({
+    #             'ussd_transport': self.transport_name,
+    #             'sms_content_transport': 'sphex_sms',
+    #             'worker_name': 'wikitest',
+    #             'api_url': self.url,
+    #             'metrics_prefix': 'test.metrics.wikipedia',
+    #             })
 
-        yield self.start_session()
-        yield self.assert_response('cthulhu', CTHULHU_RESULTS)
-        yield self.assert_response('1', CTHULHU_SECTIONS)
-        yield self.assert_response('2', CTHULHU_USSD)
+    #     yield self.start_session()
+    #     yield self.assert_response('cthulhu', CTHULHU_RESULTS)
+    #     yield self.assert_response('1', CTHULHU_SECTIONS)
+    #     yield self.assert_response('2', CTHULHU_USSD)
 
-        self.assertEqual(
-            [], self._amqp.get_messages('vumi', 'sphex_sms.outbound'))
-        yield self.assert_metrics({
-                'ussd_session_start': 1,
-                'ussd_session_search': 1,
-                'ussd_session_results': 1,
-                'ussd_session_results.1': 1,
-                'ussd_session_sections': 1,
-                'ussd_session_sections.2': 1,
-                'ussd_session_content': 1,
-                })
-
-    @inlineCallbacks
-    def test_sms_override(self):
-        yield self.replace_application({
-                'transport_name': self.transport_name,
-                'worker_name': 'wikitest',
-                'sms_transport': 'sphex_sms',
-                'api_url': self.url,
-                'override_sms_address': 'blah',
-                })
-
-        yield self.start_session()
-        yield self.assert_response('cthulhu', CTHULHU_RESULTS)
-        yield self.assert_response('1', CTHULHU_SECTIONS)
-        yield self.assert_response('2', CTHULHU_USSD)
-
-        [sms_msg] = self._amqp.get_messages('vumi', 'sphex_sms.outbound')
-        self.assertEqual(CTHULHU_SMS_NO_MORE, sms_msg['content'])
-        self.assertEqual('blah', sms_msg['to_addr'])
+    #     self.assertEqual(
+    #         [], self._amqp.get_messages('vumi', 'sphex_sms.outbound'))
+    #     yield self.assert_metrics({
+    #             'ussd_session_start': 1,
+    #             'ussd_session_search': 1,
+    #             'ussd_session_results': 1,
+    #             'ussd_session_results.1': 1,
+    #             'ussd_session_sections': 1,
+    #             'ussd_session_sections.2': 1,
+    #             'ussd_session_content': 1,
+    #             })
 
     @inlineCallbacks
     def test_invalid_selection_not_digit(self):
@@ -292,7 +274,7 @@ class WikipediaWorkerTestCase(ApplicationTestCase, FakeHTTPTestCaseMixin):
         yield self.assert_response('2', CTHULHU_USSD)
 
         for _ in range(8):
-            yield self.dispatch(self.mkmsg_in('more'), 'sphex_more.inbound')
+            yield self.dispatch(self.mkmsg_in('more'), 'sphex_sms.inbound')
 
         sms = self._amqp.get_messages('vumi', 'sphex_sms.outbound')
         self.assertEqual(CTHULHU_SMS, sms[0]['content'])
@@ -329,7 +311,7 @@ class WikipediaWorkerTestCase(ApplicationTestCase, FakeHTTPTestCaseMixin):
         yield self.assert_response('1', CTHULHU_SECTIONS)
         yield self.assert_response('2', CTHULHU_USSD)
 
-        yield self.dispatch(self.mkmsg_in('more'), 'sphex_more.inbound')
+        yield self.dispatch(self.mkmsg_in('more'), 'sphex_sms.inbound')
 
         [sms_0, sms_1] = self._amqp.get_messages('vumi', 'sphex_sms.outbound')
         self.assertEqual(CTHULHU_SMS, sms_0['content'])
@@ -354,11 +336,11 @@ class WikipediaWorkerTestCase(ApplicationTestCase, FakeHTTPTestCaseMixin):
     @inlineCallbacks
     def test_no_content_cache(self):
         yield self.replace_application({
-                'transport_name': self.transport_name,
+                'ussd_transport': self.transport_name,
+                'sms_content_transport': 'sphex_sms',
                 'worker_name': 'wikitest',
                 'sms_transport': 'sphex_sms',
                 'api_url': self.url,
-                'incoming_sms_transport': 'sphex_more',
                 'content_cache_time': 0,
                 })
 
