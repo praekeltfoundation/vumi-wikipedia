@@ -390,11 +390,35 @@ class WikipediaWorker(ApplicationWorker):
     def consume_sms_content_event(self, msg):
         raise NotImplementedError()
 
-    def reply_to(self, original_message, content, continue_session=True,
-                 **kws):
+    def reply_via(self, channel, original_message, content,
+                  continue_session=True, **kws):
+        """Send a reply over the appropriate transport based on the channel.
+
+        :param str channel:
+            Channel must be one of `menu` or `content`.
+        """
+        # TODO: Figure out a more generic way to do this.
         reply = original_message.reply(content, continue_session, **kws)
-        # FIXME: Use the right transport here!
-        return self.ussd_transport_publisher.publish_message(reply)
+
+        if channel == 'content':
+            # We only have one SMS content publisher.
+            reply['transport_name'] = self.sms_content_transport
+            return self.sms_content_transport_publisher.publish_message(reply)
+
+        if original_message['transport_name'] == self.ussd_transport:
+            # All replies to USSD messages (except SMS content, which we've
+            # already handled) must go over the USSD transport. We already have
+            # the right transport_name set here.
+            return self.ussd_transport_publisher.publish_message(reply)
+
+        if channel == 'menu':
+            # We've handled all USSD messages now, so we just have to choose
+            # the right publisher and set the transport_name in the message
+            # appropriately.
+            reply['transport_name'] = self.sms_menu_transport
+            return self.sms_menu_transport_publisher.publish_message(reply)
+
+        raise Exception("I don't know about channel %r!" % (channel,))
 
     @inlineCallbacks
     def consume_ussd_message(self, msg):
@@ -427,15 +451,15 @@ class WikipediaWorker(ApplicationWorker):
         except:
             log.err()
             self.fire_metric('ussd_session_error')
-            self.reply_to(
-                msg, 'Sorry, there was an error processing your request. '
-                'Please try again later.', False)
+            self.reply_via('menu', msg,
+                           'Sorry, there was an error processing your '
+                           'request. Please try again later.', False)
             yield self.session_manager.clear_session(user_id)
 
     def process_message_new(self, msg, session):
         self.fire_metric('ussd_session_start')
-        self.reply_to(
-            msg, "What would you like to search Wikipedia for?", True)
+        self.reply_via('menu', msg,
+                       "What would you like to search Wikipedia for?", True)
         session['state'] = 'searching'
         return session
 
@@ -448,12 +472,12 @@ class WikipediaWorker(ApplicationWorker):
         if results:
             count, msgcontent = self.make_options(results)
             session['results'] = json.dumps(results[:count])
-            self.reply_to(msg, msgcontent, True)
+            self.reply_via('menu', msg, msgcontent, True)
             session['state'] = 'sections'
         else:
             self.fire_metric('ussd_session_search.no_results')
-            self.reply_to(
-                msg, 'Sorry, no Wikipedia results for %s' % query, False)
+            self.reply_via('menu', msg,
+                           'Sorry, no Wikipedia results for %s' % query, False)
             session['state'] = None
         returnValue(session)
 
@@ -468,9 +492,9 @@ class WikipediaWorker(ApplicationWorker):
             except (KeyError, IndexError):
                 pass
         self.fire_metric(metric_prefix, 'invalid')
-        self.reply_to(msg,
-                      'Sorry, invalid selection. Please restart and try again',
-                      False)
+        self.reply_via('menu', msg,
+                       'Sorry, invalid selection. Please restart and try '
+                       'again', False)
         return None
 
     @inlineCallbacks
@@ -487,7 +511,7 @@ class WikipediaWorker(ApplicationWorker):
         results = [selection] + [s.title for s in extract.sections[1:]]
         count, msgcontent = self.make_options([r for r in results])
         session['results'] = json.dumps(results[:count])
-        self.reply_to(msg, msgcontent, True)
+        self.reply_via('menu', msg, msgcontent, True)
         session['state'] = 'content'
         returnValue(session)
 
@@ -505,10 +529,11 @@ class WikipediaWorker(ApplicationWorker):
         content = extract.sections[int(msg['content'].strip()) - 1].full_text()
         session['sms_content'] = normalize_whitespace(content)
         session['sms_offset'] = 0
-        ussd_cont = self.ussd_formatter.format(
-            content, '\n(Full content sent by SMS.)')
-        self.fire_metric('ussd_session_content')
-        self.reply_to(msg, ussd_cont, False)
+        if msg['transport_name'] == self.ussd_transport:
+            ussd_cont = self.ussd_formatter.format(
+                content, '\n(Full content sent by SMS.)')
+            self.fire_metric('ussd_session_content')
+            self.reply_via('menu', msg, ussd_cont, False)
         session = yield self.send_sms_content(msg, session)
         session['state'] = 'more'
         returnValue(session)
