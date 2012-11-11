@@ -69,6 +69,8 @@ class WikipediaWorkerTestCase(ApplicationTestCase, FakeHTTPTestCaseMixin):
                 'worker_name': 'wikitest',
                 'api_url': self.url,
                 'metrics_prefix': 'test.metrics.wikipedia',
+                'sms_search_transport':'sms_search',
+                'sms_menu_transport':'sms_menu',
                 })
         self.wikipedia = self.worker.wikipedia
 
@@ -135,6 +137,25 @@ class WikipediaWorkerTestCase(ApplicationTestCase, FakeHTTPTestCaseMixin):
                 'ussd_session_content': 1,
                 })
 
+    @inlineCallbacks
+    def test_happy_flow_sms(self):
+        yield self.start_session()
+        yield self.assert_response('cthulhu', CTHULHU_RESULTS)
+        yield self.assert_response('1', CTHULHU_SECTIONS)
+        yield self.assert_response('2', CTHULHU_USSD)
+
+        [sms_msg] = self._amqp.get_messages('vumi', 'sphex_sms.outbound')
+        self.assertEqual(CTHULHU_SMS, sms_msg['content'])
+        self.assertEqual('+41791234567', sms_msg['to_addr'])
+        yield self.assert_metrics({
+                'ussd_session_start': 1,
+                'ussd_session_search': 1,
+                'ussd_session_results': 1,
+                'ussd_session_results.1': 1,
+                'ussd_session_sections': 1,
+                'ussd_session_sections.2': 1,
+                'ussd_session_content': 1,
+                })
     @inlineCallbacks
     def test_no_metrics_prefix(self):
         yield self.replace_application({

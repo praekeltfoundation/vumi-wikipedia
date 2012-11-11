@@ -409,10 +409,41 @@ class WikipediaWorker(ApplicationWorker):
             return self.session_manager.save_session(user_id, session)
 
     def consume_sms_search_message(self, msg):
-        raise NotImplementedError()
+        log.msg("Received: %s" % (msg.payload,))
+        user_id = msg.user()
+        session_event = self._message_session_event(msg)
+        session = yield self.load_session(user_id)
+
+     #  session = yield self.session_manager.create_session(user_id)
+        session['state'] = 'searching'
+
+        pfunc = getattr(self, 'process_message_%s' % (session['state'],))
+        try:
+            session = yield pfunc(msg, session)
+            yield self.handle_session_result(user_id, session)
+        except:
+            log.err()
+            self.fire_metric('sms_session_error')
+            self.reply_via(
+                'menu', msg, 'Sorry, there was an error processing your request. '
+                'Please try again later.', False)
+            yield self.session_manager.clear_session(user_id)
 
     def consume_sms_menu_message(self, msg):
-        raise NotImplementedError()
+        self.fire_metric('sms_session_search')
+        query = msg['content'].strip()
+
+        results = yield self.wikipedia.search(query)
+        if results:
+            count, msgcontent = self.make_options(results)
+            session['results'] = json.dumps(results[:count])
+            self.reply_via('menu', msg, msgcontent, True)
+            session['state'] = 'sections'
+        else:
+            self.fire_metric('sms_session_search.no_results')
+            self.reply_via('menu', msg, self.MSG_NO_RESULTS % (query,), False)
+            session['state'] = None
+        returnValue(session)
 
     def consume_sms_content_message(self, msg):
         return self.consume_sms_message(msg)
@@ -483,6 +514,10 @@ class WikipediaWorker(ApplicationWorker):
             session = yield self.session_manager.create_session(user_id)
             session['state'] = 'new'
 
+        yield self.process_message_generic(msg,session,user_id)
+
+    @inlineCallbacks
+    def process_message_generic(self,msg,session, user_id):
         pfunc = getattr(self, 'process_message_%s' % (session['state'],))
         try:
             session = yield pfunc(msg, session)
