@@ -185,6 +185,7 @@ class WikipediaWorker(ApplicationWorker):
             'ussd_session_content',
             'sms_more_content_reply',
             'sms_more_content_reply.extra',
+            'sms_more_content_reply.no_content',
             'ussd_session_error',
             ]
         for i in range(1, 10):
