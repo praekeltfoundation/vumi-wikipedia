@@ -162,8 +162,11 @@ class WikipediaWorker(ApplicationWorker):
             self.max_sms_content_length, self.max_sms_unicode_length,
             sentence_break_threshold=self.sentence_break_threshold)
 
+        if self.sms_transport:
+            self._setup_outbound_sms_transport()
+
         if self.incoming_sms_transport:
-            yield self._setup_sms_transport_consumer()
+            yield self._setup_incoming_sms_transport()
 
     @inlineCallbacks
     def _setup_metrics(self):
@@ -205,13 +208,26 @@ class WikipediaWorker(ApplicationWorker):
         self.metrics[metric_name].set(value)
         pass
 
-    @inlineCallbacks
-    def _setup_sms_transport_consumer(self):
-        self.sms_transport_consumer = yield self.consume(
-            '%(incoming_sms_transport)s.inbound' % self.config,
-            self.consume_sms_message,
-            message_class=TransportUserMessage)
-        self._consumers.append(self.sms_transport_consumer)
+    def consume_content_sms_event(self, event):
+        # TODO: We probably shouldn't just ignore these.
+        pass
+
+    def _setup_incoming_sms_transport(self):
+        return self.setup_transport_connection(
+            'incoming_sms', self.config['incoming_sms_transport'],
+            self.consume_sms_message, self.consume_content_sms_event)
+
+    def _setup_outbound_sms_transport(self):
+        return self.setup_transport_connection(
+            'sms', self.config['sms_transport'],
+            self.consume_sms_message, self.consume_content_sms_event)
+
+    def _setup_transport_consumer(self):
+        self.transport_consumer.unpause()
+        if hasattr(self, 'incoming_sms_consumer'):
+            self.incoming_sms_consumer.unpause()
+        if hasattr(self, 'sms_event_consumer'):
+            self.sms_event_consumer.unpause()
 
     @inlineCallbacks
     def teardown_application(self):
@@ -424,8 +440,7 @@ class WikipediaWorker(ApplicationWorker):
         bmsg['transport_type'] = 'sms'
         if self.override_sms_address:
             bmsg['to_addr'] = self.override_sms_address
-        self.transport_publisher.publish_message(
-            bmsg, routing_key='%s.outbound' % (self.sms_transport,))
+        self.sms_publisher.publish_message(bmsg)
 
         return session
 
