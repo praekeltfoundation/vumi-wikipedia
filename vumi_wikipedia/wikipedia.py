@@ -223,7 +223,7 @@ class WikipediaWorker(ApplicationWorker):
             self.consume_sms_message, self.consume_content_sms_event)
 
     def _setup_transport_consumer(self):
-        self.transport_consumer.unpause()
+        super(WikipediaWorker, self)._setup_transport_consumer()
         if hasattr(self, 'incoming_sms_consumer'):
             self.incoming_sms_consumer.unpause()
         if hasattr(self, 'sms_event_consumer'):
