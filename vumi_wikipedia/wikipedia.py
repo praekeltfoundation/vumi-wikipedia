@@ -9,6 +9,8 @@ from vumi.persist.txredis_manager import TxRedisManager
 from vumi.components.session import SessionManager
 from vumi.message import TransportUserMessage
 from vumi.blinkenlights.metrics import MetricManager, Count
+from vumi.config import (
+    ConfigUrl, ConfigBool, ConfigText, ConfigInt, ConfigDict)
 
 from vumi_wikipedia.wikipedia_api import WikipediaAPI, ArticleExtract
 from vumi_wikipedia.text_manglers import normalize_whitespace, ContentFormatter
@@ -19,163 +21,130 @@ def mkmenu(options, prefix, start=1):
         ['%s. %s' % (idx, opt) for idx, opt in enumerate(options, start)])
 
 
+class WikipediaConfig(ApplicationWorker.CONFIG_CLASS):
+    api_url = ConfigUrl(
+        "URL for the MediaWiki API to query. This defaults to the English"
+        " Wikipedia. Any recent enough MediaWiki installation should be fine,"
+        " although certain assumptions are made about the structure of"
+        " articles that may not hold outside of Wikipedia.",
+        default='http://en.wikipedia.org/w/api.php')
+
+    accept_gzip = ConfigBool(
+        "If `True`, the HTTP client will request gzipped responses. This is"
+        " generally beneficial, although it requires Twisted 11.1 or later.",
+        default=True)
+
+    user_agent = ConfigText(
+        "Value of the `User-Agent` header on API requests.",
+        default='vumi-wikipedia HTTP API')
+
+    max_session_length = ConfigInt(
+        "Lifetime of query session in seconds. This includes the lifetime of"
+        " the content kept for further SMS deliveries.", default=600)
+
+    max_ussd_content_length = ConfigInt(
+        "Maximum character length of ASCII USSD content.", default=160)
+
+    max_ussd_unicode_length = ConfigInt(
+        "Maximum character length of unicode USSD content.", default=70)
+
+    max_sms_content_length = ConfigInt(
+        "Maximum character length of ASCII SMS content.", default=160)
+
+    max_sms_unicode_length = ConfigInt(
+        "Maximum character length of unicode SMS content.", default=70)
+
+    sentence_break_threshold = ConfigInt(
+        "If a sentence break is found within this many characters of the end"
+        " of the truncated message, truncate at the sentence break instead of"
+        " a word break.", default=10)
+
+    send_sms_content = ConfigBool(
+        "Set this to `False` to suppress the sending of content via SMS.",
+        default=True)
+
+    send_more_sms_content = ConfigBool(
+        "Set this to `False` to ignore requests for more content via SMS.",
+        default=True)
+
+    more_content_suffix = ConfigText(
+        "Suffix for SMS content that can be continued. An empty string"
+        " should be specified if there is no incoming SMS connection.",
+        default=' (reply for more)')
+
+    no_more_content_suffix = ConfigText(
+        "Suffix for SMS content that is complete. An empty string should be "
+        " specified if there is no incoming SMS connection.",
+        default=' (end of section)')
+
+    metrics_prefix = ConfigText(
+        "Prefix for metrics names. If unset, no metrics will be collected.",
+        static=True)
+
+    content_cache_time = ConfigInt(
+        "Lifetime of cached article content in seconds. If unset, no caching"
+        " will be done.", static=True, default=0)
+
+    redis_manager = ConfigDict(
+        "Redis connection configuration.", static=True, default={})
+
+
 class WikipediaWorker(ApplicationWorker):
     """Look up Wikipedia content over USSD, deliver over USSD/SMS.
 
-    Config parameters
-    -----------------
-
-    sms_transport : str, optional
-        If set, this specifies a different transport for sending SMS replies.
-        Otherwise the same transport will be used for both USSD and SMS.
-
-    override_sms_address : str, optional
-        If set, this overrides the `to_addr` for SMS replies. This is useful
-        for demos where a fake USSD transport is being used but real SMS
-        replies are desired.
-
-    api_url : str, optional
-        Alternate API URL to use. This can be any MediaWiki deployment,
-        although certain assumptions are made about the structure of articels
-        that may not be valid outside of Wikipedia.
-
-    accept_gzip : bool, optional
-        If `True`, the HTTP client will request gzipped responses. This is
-        generally beneficial, although it requires Twisted 11.1 or later.
-
-    user_agent : str, optional
-        Override `User-Agent` header on API requests.
-
-    incoming_sms_transport : str, optional
-        If set, this specifies a different transport for receiving "more
-        content" SMS messages. If unset, incoming SMS messages will be ignored.
-
-    max_ussd_session_length : int, optional
-        Lifetime of USSD session in seconds. Defaults to 3 minutes. (If
-        `incoming_sms_transport` is set, this should be set to a longer time.)
-
-    content_cache_time : int, optional
-        Lifetime of cached article content in seconds. Defaults to 1 hour.
-
-    max_ussd_content_length : int, optional
-        Maximum character length of ASCII USSD content. Defaults to 160.
-
-    max_ussd_unicode_length : int, optional
-        Maximum character length of unicode USSD content. Defaults to 70.
-
-    max_sms_content_length : int, optional
-        Maximum character length of ASCII SMS content. Defaults to 160.
-
-    max_sms_unicode_length : int, optional
-        Maximum character length of unicode SMS content. Defaults to 70.
-
-    sentence_break_threshold : int, optional
-        If a sentence break is found within this many characters of the end of
-        the truncated message, truncate at the sentence break instead of a word
-        break. Defaults to 10.
-
-    more_content_postfix : str, optional
-        Postfix for SMS content that can be continued. Ignored if
-        `incoming_sms_transport` is not set. Defaults to ' (reply for more)'
-
-    no_more_content_postfix : str, optional
-        Postfix for SMS content that is complete. Ignored if
-        `incoming_sms_transport` is not set. Defaults to ' (end of section)'
-
-    metrics_prefix : str, optional
-        Prefix for metrics names. If unset, no metrics will be collected.
+    Please note: This version is significantly different from previous versions
+    and requires the use of an endpoints-aware dispatcher to connect it to the
+    various transports.
     """
 
-    MAX_USSD_SESSION_LENGTH = 3 * 60
-    CONTENT_CACHE_TIME = 3600
-
-    MAX_USSD_CONTENT_LENGTH = 160
-    MAX_USSD_UNICODE_LENGTH = 70
-    MAX_SMS_CONTENT_LENGTH = 160
-    MAX_SMS_UNICODE_LENGTH = 70
-    SENTENCE_BREAK_THRESHOLD = 10
-
-    MORE_CONTENT_POSTFIX = u' (reply for more)'
-    NO_MORE_CONTENT_POSTFIX = u' (end of section)'
-
-    def _opt_config(self, name):
-        return self.config.get(name, None)
-
-    def validate_config(self):
-        self.sms_transport = self._opt_config('sms_transport')
-        self.incoming_sms_transport = self._opt_config(
-            'incoming_sms_transport')
-        self.override_sms_address = self._opt_config('override_sms_address')
-
-        self.api_url = self._opt_config('api_url')
-        self.accept_gzip = self._opt_config('accept_gzip')
-        self.user_agent = self._opt_config('user_agent')
-
-        self.max_ussd_session_length = self.config.get(
-            'max_ussd_session_length', self.MAX_USSD_SESSION_LENGTH)
-        self.content_cache_time = self.config.get(
-            'content_cache_time', self.CONTENT_CACHE_TIME)
-
-        self.max_ussd_content_length = self.config.get(
-            'max_ussd_content_length', self.MAX_USSD_CONTENT_LENGTH)
-        self.max_ussd_unicode_length = self.config.get(
-            'max_ussd_unicode_length', self.MAX_USSD_UNICODE_LENGTH)
-        self.max_sms_content_length = self.config.get(
-            'max_sms_content_length', self.MAX_SMS_CONTENT_LENGTH)
-        self.max_sms_unicode_length = self.config.get(
-            'max_sms_unicode_length', self.MAX_SMS_UNICODE_LENGTH)
-        self.sentence_break_threshold = self.config.get(
-            'sentence_break_threshold', self.SENTENCE_BREAK_THRESHOLD)
-
-        if self.incoming_sms_transport:
-            self.more_content_postfix = self.config.get(
-                'more_content_postfix', self.MORE_CONTENT_POSTFIX)
-            self.no_more_content_postfix = self.config.get(
-                'no_more_content_postfix', self.NO_MORE_CONTENT_POSTFIX)
-        else:
-            self.more_content_postfix = u''
-            self.no_more_content_postfix = u''
-
-        self.metrics_prefix = self.config.get('metrics_prefix')
+    CONFIG_CLASS = WikipediaConfig
 
     @inlineCallbacks
     def setup_application(self):
-        yield self._setup_metrics()
-        redis = yield TxRedisManager.from_config(
-            self.config.get('redis_manager', {}))
-        redis = redis.sub_manager(self.config['worker_name'])
+        config = self.get_static_config()
+        yield self._setup_metrics(config.metrics_prefix)
 
-        self.extract_redis = redis.sub_manager('extracts')
+        redis = yield TxRedisManager.from_config(config.redis_manager)
+        self._redis = redis.sub_manager(self.config['worker_name'])
 
-        self.session_manager = SessionManager(
-            redis.sub_manager('session'),
-            max_session_length=self.max_ussd_session_length)
+        if config.content_cache_time:
+            self.extract_redis = redis.sub_manager('extracts')
 
-        self.wikipedia = WikipediaAPI(
-            self.api_url, self.accept_gzip, self.user_agent)
+        self.connectors[self.transport_name].set_inbound_handler(
+            self.consume_content_sms_message, 'sms_content')
+        self.connectors[self.transport_name].set_event_handler(
+            self.consume_content_sms_event, 'sms_content')
 
-        self.ussd_formatter = ContentFormatter(
-            self.max_ussd_content_length, self.max_ussd_unicode_length,
+    def get_redis(self, config):
+        return self._redis
+
+    def get_session_manager(self, config):
+        return SessionManager(
+            self.get_redis(config).sub_manager('session'),
+            max_session_length=config.max_session_length)
+
+    def get_wikipedia_api(self, config):
+        return WikipediaAPI(
+            config.api_url.geturl(), config.accept_gzip, config.user_agent)
+
+    def get_sms_formatter(self, config):
+        return ContentFormatter(
+            config.max_sms_content_length, config.max_sms_unicode_length,
+            sentence_break_threshold=config.sentence_break_threshold)
+
+    def get_ussd_formatter(self, config):
+        return ContentFormatter(
+            config.max_ussd_content_length, config.max_ussd_unicode_length,
             sentence_break_threshold=0)
 
-        self.sms_formatter = ContentFormatter(
-            self.max_sms_content_length, self.max_sms_unicode_length,
-            sentence_break_threshold=self.sentence_break_threshold)
-
-        if self.sms_transport:
-            self._setup_outbound_sms_transport()
-
-        if self.incoming_sms_transport:
-            yield self._setup_incoming_sms_transport()
-
     @inlineCallbacks
-    def _setup_metrics(self):
-        if self.metrics_prefix is None:
+    def _setup_metrics(self, metrics_prefix):
+        if metrics_prefix is None:
             self.metrics = None
             return
 
         self.metrics = yield self.start_publisher(
-            MetricManager, self.metrics_prefix + '.')
+            MetricManager, metrics_prefix + '.')
 
         metrics = [
             'ussd_session_start',
@@ -212,60 +181,44 @@ class WikipediaWorker(ApplicationWorker):
         # TODO: We probably shouldn't just ignore these.
         pass
 
-    def _setup_incoming_sms_transport(self):
-        return self.setup_transport_connection(
-            'incoming_sms', self.config['incoming_sms_transport'],
-            self.consume_sms_message, self.consume_content_sms_event)
-
-    def _setup_outbound_sms_transport(self):
-        return self.setup_transport_connection(
-            'sms', self.config['sms_transport'],
-            self.consume_sms_message, self.consume_content_sms_event)
-
-    def _setup_transport_consumer(self):
-        super(WikipediaWorker, self)._setup_transport_consumer()
-        if hasattr(self, 'incoming_sms_consumer'):
-            self.incoming_sms_consumer.unpause()
-        if hasattr(self, 'sms_event_consumer'):
-            self.sms_event_consumer.unpause()
-
     @inlineCallbacks
     def teardown_application(self):
-        yield self.session_manager.stop()
+        yield self._redis._close()
         if self.metrics is not None:
             yield self.metrics.stop()
 
-    def make_options(self, options, prefix='', start=1):
+    def make_options(self, config, options, prefix='', start=1):
         """
         Turn a list of results into an enumerated multiple choice list
         """
         joined = mkmenu(options, prefix, start)
-        while len(joined) > self.max_ussd_content_length:
+        while len(joined) > config.max_ussd_content_length:
             if not options:
                 break
             options = options[:-1]
             joined = mkmenu(options, prefix, start)
 
-        return len(options), joined[:self.max_ussd_content_length]
+        return len(options), joined[:config.max_ussd_content_length]
 
     @inlineCallbacks
-    def _get_cached_extract(self, title):
-        key = self.wikipedia.url + ':' + title
+    def _get_cached_extract(self, config, title):
+        wikipedia = self.get_wikipedia_api(config)
+        key = ':'.join([wikipedia.url, title])
         data = yield self.extract_redis.get(key)
         if data is None:
-            extract = yield self.wikipedia.get_extract(title)
+            extract = yield wikipedia.get_extract(config, title)
             # We do this in two steps because our redis clients disagree on
             # what SETEX should look like.
             yield self.extract_redis.set(key, extract.to_json())
-            yield self.extract_redis.expire(key, self.content_cache_time)
+            yield self.extract_redis.expire(key, config.content_cache_time)
         else:
             extract = ArticleExtract.from_json(data)
         returnValue(extract)
 
-    def get_extract(self, title):
-        if self.content_cache_time > 0:
-            return self._get_cached_extract(title)
-        return self.wikipedia.get_extract(title)
+    def get_extract(self, config, title):
+        if config.content_cache_time > 0:
+            return self._get_cached_extract(config, title)
+        return self.get_wikipedia_api(config).get_extract(title)
 
     def _message_session_event(self, msg):
         # First, check for session parameters on the message.
@@ -287,36 +240,38 @@ class WikipediaWorker(ApplicationWorker):
         return self.consume_user_message(msg)
 
     @inlineCallbacks
-    def handle_session_result(self, user_id, session):
+    def handle_session_result(self, session_manager, user_id, session):
         if session['state'] is None:
-            yield self.session_manager.clear_session(user_id)
+            yield session_manager.clear_session(user_id)
         else:
-            yield self.save_session(user_id, session)
+            yield self.save_session(session_manager, user_id, session)
 
     @inlineCallbacks
-    def load_session(self, user_id):
-        session = yield self.session_manager.load_session(user_id)
+    def load_session(self, session_manager, user_id):
+        session = yield session_manager.load_session(user_id)
         if not session:
             returnValue(session)
         returnValue(dict((k, json.loads(v)) for k, v in session.items()))
 
-    def save_session(self, user_id, session):
+    def save_session(self, session_manager, user_id, session):
         if session:
             session = dict((k, json.dumps(v)) for k, v in session.items())
-            return self.session_manager.save_session(user_id, session)
+            return session_manager.save_session(user_id, session)
 
     @inlineCallbacks
     def consume_user_message(self, msg):
         log.msg("Received: %s" % (msg.payload,))
+        config = yield self.get_config(msg)
         user_id = msg.user()
         session_event = self._message_session_event(msg)
-        session = yield self.load_session(user_id)
+        session_manager = self.get_session_manager(config)
+        session = yield self.load_session(session_manager, user_id)
 
         if session_event == 'close':
-            if ((not self.incoming_sms_transport)
+            if ((not config.send_sms_content)
                     or (session and session['state'] != 'more')):
                 # Session closed, so clean up and don't reply.
-                yield self.session_manager.clear_session(user_id)
+                yield session_manager.clear_session(user_id)
             # We never want to respond to close messages, even if we keep the
             # session alive for the "more" handling.
             return
@@ -327,22 +282,22 @@ class WikipediaWorker(ApplicationWorker):
             session_event = 'new'
 
         if session_event == 'new':
-            session = yield self.session_manager.create_session(user_id)
+            session = yield session_manager.create_session(user_id)
             session['state'] = 'new'
 
         pfunc = getattr(self, 'process_message_%s' % (session['state'],))
         try:
-            session = yield pfunc(msg, session)
-            yield self.handle_session_result(user_id, session)
+            session = yield pfunc(msg, config, session)
+            yield self.handle_session_result(session_manager, user_id, session)
         except:
             log.err()
             self.fire_metric('ussd_session_error')
             self.reply_to(
                 msg, 'Sorry, there was an error processing your request. '
                 'Please try again later.', False)
-            yield self.session_manager.clear_session(user_id)
+            yield session_manager.clear_session(user_id)
 
-    def process_message_new(self, msg, session):
+    def process_message_new(self, msg, config, session):
         self.fire_metric('ussd_session_start')
         self.reply_to(
             msg, "What would you like to search Wikipedia for?", True)
@@ -350,13 +305,13 @@ class WikipediaWorker(ApplicationWorker):
         return session
 
     @inlineCallbacks
-    def process_message_searching(self, msg, session):
+    def process_message_searching(self, msg, config, session):
         self.fire_metric('ussd_session_search')
         query = msg['content'].strip()
 
-        results = yield self.wikipedia.search(query)
+        results = yield self.get_wikipedia_api(config).search(query)
         if results:
-            count, msgcontent = self.make_options(results)
+            count, msgcontent = self.make_options(config, results)
             session['results'] = json.dumps(results[:count])
             self.reply_to(msg, msgcontent, True)
             session['state'] = 'sections'
@@ -384,7 +339,7 @@ class WikipediaWorker(ApplicationWorker):
         return None
 
     @inlineCallbacks
-    def process_message_sections(self, msg, session):
+    def process_message_sections(self, msg, config, session):
         self.fire_metric('ussd_session_results')
         selection = self.select_option(json.loads(session['results']), msg,
                                        metric_prefix='ussd_session_results')
@@ -393,16 +348,16 @@ class WikipediaWorker(ApplicationWorker):
             returnValue(session)
 
         session['page'] = json.dumps(selection)
-        extract = yield self.get_extract(selection)
+        extract = yield self.get_extract(config, selection)
         results = [selection] + [s.title for s in extract.sections[1:]]
-        count, msgcontent = self.make_options([r for r in results])
+        count, msgcontent = self.make_options(config, [r for r in results])
         session['results'] = json.dumps(results[:count])
         self.reply_to(msg, msgcontent, True)
         session['state'] = 'content'
         returnValue(session)
 
     @inlineCallbacks
-    def process_message_content(self, msg, session):
+    def process_message_content(self, msg, config, session):
         self.fire_metric('ussd_session_sections')
         sections = json.loads(session['results'])
         selection = self.select_option(sections, msg,
@@ -411,42 +366,41 @@ class WikipediaWorker(ApplicationWorker):
             session['state'] = None
             returnValue(session)
         page = json.loads(session['page'])
-        extract = yield self.get_extract(page)
+        extract = yield self.get_extract(config, page)
         content = extract.sections[int(msg['content'].strip()) - 1].full_text()
         session['sms_content'] = normalize_whitespace(content)
         session['sms_offset'] = 0
-        ussd_cont = self.ussd_formatter.format(
+        ussd_cont = self.get_ussd_formatter(config).format(
             content, '\n(Full content sent by SMS.)')
         self.fire_metric('ussd_session_content')
         self.reply_to(msg, ussd_cont, False)
-        if self.sms_transport:
-            session = yield self.send_sms_content(msg, session)
-        if self.incoming_sms_transport is None:
+        if config.send_sms_content:
+            session = yield self.send_sms_content(msg, config, session)
+        if not config.send_more_sms_content:
             session['state'] = None
         else:
             session['state'] = 'more'
         returnValue(session)
 
-    def send_sms_content(self, msg, session):
-        content_len, sms_content = self.sms_formatter.format_more(
+    @inlineCallbacks
+    def send_sms_content(self, msg, config, session):
+        content_len, sms_content = self.get_sms_formatter(config).format_more(
             session['sms_content'], session['sms_offset'],
-            self.more_content_postfix, self.no_more_content_postfix)
+            config.more_content_suffix, config.no_more_content_suffix)
         session['sms_offset'] = session['sms_offset'] + content_len + 1
         if session['sms_offset'] >= len(session['sms_content']):
             session['state'] = None
 
-        bmsg = msg.reply(sms_content)
-        bmsg['transport_name'] = self.sms_transport
-        bmsg['transport_type'] = 'sms'
-        if self.override_sms_address:
-            bmsg['to_addr'] = self.override_sms_address
-        self.sms_publisher.publish_message(bmsg)
+        yield self.send_to(
+            msg['from_addr'], sms_content, transport_type='sms',
+            endpoint='sms_content')
 
-        return session
+        returnValue(session)
 
     @inlineCallbacks
-    def consume_sms_message(self, msg):
+    def consume_content_sms_message(self, msg):
         log.msg("Received SMS: %s" % (msg.payload,))
+        config = yield self.get_config(msg)
 
         # This is to exclude some spurious messages we might receive.
         if msg['content'] is None:
@@ -455,7 +409,9 @@ class WikipediaWorker(ApplicationWorker):
 
         user_id = msg.user()
 
-        session = yield self.load_session(user_id)
+        session_manager = self.get_session_manager(config)
+
+        session = yield self.load_session(session_manager, user_id)
         self.fire_metric('sms_more_content_reply')
         if not session:
             # TODO: Reply with error?
@@ -469,9 +425,9 @@ class WikipediaWorker(ApplicationWorker):
         self.fire_metric('sms_more_content_reply', more_messages)
 
         try:
-            session = yield self.send_sms_content(msg, session)
-            yield self.handle_session_result(user_id, session)
+            session = yield self.send_sms_content(msg, config, session)
+            yield self.handle_session_result(session_manager, user_id, session)
         except:
             log.err()
             # TODO: Reply with error?
-            yield self.session_manager.clear_session(user_id)
+            yield session_manager.clear_session(user_id)

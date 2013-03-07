@@ -1,6 +1,7 @@
 """Tests for vumi.demos.wikipedia."""
 
 import json
+from urlparse import urlparse
 
 from twisted.internet.defer import inlineCallbacks
 
@@ -68,7 +69,6 @@ class WikipediaWorkerTestCase(ApplicationTestCase, FakeHTTPTestCaseMixin):
                 'incoming_sms_transport': 'sphex_more',
                 'metrics_prefix': 'test.metrics.wikipedia',
                 })
-        self.wikipedia = self.worker.wikipedia
 
     @inlineCallbacks
     def replace_application(self, config):
@@ -80,8 +80,12 @@ class WikipediaWorkerTestCase(ApplicationTestCase, FakeHTTPTestCaseMixin):
     @inlineCallbacks
     def assert_response(self, text, expected, session_event=None):
         yield self.dispatch(self.mkmsg_in(text, session_event=session_event))
-        self.assertEqual(expected,
-                         self.get_dispatched_messages()[-1]['content'])
+        self.assertEqual(
+            expected, self.get_outbound_msgs('default')[-1]['content'])
+
+    def get_outbound_msgs(self, endpoint):
+        return [m for m in self.get_dispatched_outbound()
+                if m['routing_metadata']['endpoint_name'] == endpoint]
 
     @inlineCallbacks
     def assert_metrics(self, expected_metrics):
@@ -89,7 +93,7 @@ class WikipediaWorkerTestCase(ApplicationTestCase, FakeHTTPTestCaseMixin):
         yield self._amqp.kick_delivery()
         [msg] = self._amqp.dispatched['vumi.metrics']['vumi.metrics']
         metrics = {}
-        prefix_len = len(self.worker.config['metrics_prefix']) + 1
+        prefix_len = len(self.worker.get_static_config().metrics_prefix) + 1
         for name, _, points in json.loads(msg.body)['datapoints']:
             val = sum(v for ts, v in points)
             if val > 0:
@@ -100,18 +104,28 @@ class WikipediaWorkerTestCase(ApplicationTestCase, FakeHTTPTestCaseMixin):
         return self.assert_response(
             None, 'What would you like to search Wikipedia for?')
 
+    def dispatch_sms_content(self, msg):
+        msg.set_routing_endpoint('sms_content')
+        return self.dispatch(msg)
+
     @inlineCallbacks
     def tearDown(self):
         yield self.stop_webserver()
         yield super(WikipediaWorkerTestCase, self).tearDown()
 
+    @inlineCallbacks
     def assert_config_knob(self, attr, orig, new):
-        self.assertEqual(orig, getattr(self.worker, attr))
-        self.assertEqual(new, getattr(self.knobbly_worker, attr))
+        msg = self.mkmsg_in()
+        worker_config = yield self.worker.get_config(msg)
+        knobbly_config = yield self.knobbly_worker.get_config(msg)
+        self.assertEqual(orig, getattr(worker_config, attr))
+        self.assertEqual(new, getattr(knobbly_config, attr))
 
+    @inlineCallbacks
     def test_make_options(self):
+        config = yield self.worker.get_config(self.mkmsg_in())
         self.assertEqual((2, "1. foo\n2. bar"),
-                         self.worker.make_options(['foo', 'bar']))
+                         self.worker.make_options(config, ['foo', 'bar']))
 
     @inlineCallbacks
     def test_happy_flow(self):
@@ -120,7 +134,7 @@ class WikipediaWorkerTestCase(ApplicationTestCase, FakeHTTPTestCaseMixin):
         yield self.assert_response('1', CTHULHU_SECTIONS)
         yield self.assert_response('2', CTHULHU_USSD)
 
-        [sms_msg] = self._amqp.get_messages('vumi', 'sphex_sms.outbound')
+        [sms_msg] = self.get_outbound_msgs('sms_content')
         self.assertEqual(CTHULHU_SMS, sms_msg['content'])
         self.assertEqual('+41791234567', sms_msg['to_addr'])
         yield self.assert_metrics({
@@ -169,25 +183,6 @@ class WikipediaWorkerTestCase(ApplicationTestCase, FakeHTTPTestCaseMixin):
                 'ussd_session_sections.2': 1,
                 'ussd_session_content': 1,
                 })
-
-    @inlineCallbacks
-    def test_sms_override(self):
-        yield self.replace_application({
-                'transport_name': self.transport_name,
-                'worker_name': 'wikitest',
-                'sms_transport': 'sphex_sms',
-                'api_url': self.url,
-                'override_sms_address': 'blah',
-                })
-
-        yield self.start_session()
-        yield self.assert_response('cthulhu', CTHULHU_RESULTS)
-        yield self.assert_response('1', CTHULHU_SECTIONS)
-        yield self.assert_response('2', CTHULHU_USSD)
-
-        [sms_msg] = self._amqp.get_messages('vumi', 'sphex_sms.outbound')
-        self.assertEqual(CTHULHU_SMS_NO_MORE, sms_msg['content'])
-        self.assertEqual('blah', sms_msg['to_addr'])
 
     @inlineCallbacks
     def test_invalid_selection_not_digit(self):
@@ -264,25 +259,27 @@ class WikipediaWorkerTestCase(ApplicationTestCase, FakeHTTPTestCaseMixin):
                 'sms_transport': 'sphex_sms',
 
                 'api_url': 'https://localhost:1337/',
-                'accept_gzip': True,
+                'accept_gzip': False,
                 'user_agent': 'Bob Howard',
-                'max_ussd_session_length': 200,
-                'content_cache_time': 1800,
+                'max_session_length': 200,
+                'content_cache_time': 3600,
                 'max_ussd_content_length': 180,
                 'max_ussd_unicode_length': 80,
                 'max_sms_content_length': 300,
                 'max_sms_unicode_length': 130,
                 })
 
-        self.assert_config_knob('api_url', self.url, 'https://localhost:1337/')
-        self.assert_config_knob('accept_gzip', None, True)
-        self.assert_config_knob('user_agent', None, 'Bob Howard')
-        self.assert_config_knob('max_ussd_session_length', 180, 200)
-        self.assert_config_knob('content_cache_time', 3600, 1800)
-        self.assert_config_knob('max_ussd_content_length', 160, 180)
-        self.assert_config_knob('max_ussd_unicode_length', 70, 80)
-        self.assert_config_knob('max_sms_content_length', 160, 300)
-        self.assert_config_knob('max_sms_unicode_length', 70, 130)
+        yield self.assert_config_knob('api_url', urlparse(self.url),
+                                      urlparse('https://localhost:1337/'))
+        yield self.assert_config_knob('accept_gzip', True, False)
+        yield self.assert_config_knob('user_agent', 'vumi-wikipedia HTTP API',
+                                      'Bob Howard')
+        yield self.assert_config_knob('max_session_length', 600, 200)
+        yield self.assert_config_knob('content_cache_time', 0, 3600)
+        yield self.assert_config_knob('max_ussd_content_length', 160, 180)
+        yield self.assert_config_knob('max_ussd_unicode_length', 70, 80)
+        yield self.assert_config_knob('max_sms_content_length', 160, 300)
+        yield self.assert_config_knob('max_sms_unicode_length', 70, 130)
 
     @inlineCallbacks
     def test_happy_flow_more(self):
@@ -292,9 +289,11 @@ class WikipediaWorkerTestCase(ApplicationTestCase, FakeHTTPTestCaseMixin):
         yield self.assert_response('2', CTHULHU_USSD)
 
         for _ in range(8):
-            yield self.dispatch(self.mkmsg_in('more'), 'sphex_more.inbound')
+            msg = self.mkmsg_in('more')
+            msg.set_routing_endpoint('sms_content')
+            yield self.dispatch(msg)
 
-        sms = self._amqp.get_messages('vumi', 'sphex_sms.outbound')
+        sms = self.get_outbound_msgs('sms_content')
         self.assertEqual(CTHULHU_SMS, sms[0]['content'])
         self.assertEqual('+41791234567', sms[0]['to_addr'])
 
@@ -329,9 +328,9 @@ class WikipediaWorkerTestCase(ApplicationTestCase, FakeHTTPTestCaseMixin):
         yield self.assert_response('1', CTHULHU_SECTIONS)
         yield self.assert_response('2', CTHULHU_USSD)
 
-        yield self.dispatch(self.mkmsg_in('more'), 'sphex_more.inbound')
+        yield self.dispatch_sms_content(self.mkmsg_in('more'))
 
-        [sms_0, sms_1] = self._amqp.get_messages('vumi', 'sphex_sms.outbound')
+        [sms_0, sms_1] = self.get_outbound_msgs('sms_content')
         self.assertEqual(CTHULHU_SMS, sms_0['content'])
         self.assertEqual('+41791234567', sms_0['to_addr'])
         self.assertEqual(CTHULHU_MORE, sms_1['content'])
@@ -370,7 +369,7 @@ class WikipediaWorkerTestCase(ApplicationTestCase, FakeHTTPTestCaseMixin):
         yield self.assert_response('1', CTHULHU_SECTIONS)
         yield self.assert_response('2', CTHULHU_USSD)
 
-        [sms_msg] = self._amqp.get_messages('vumi', 'sphex_sms.outbound')
+        [sms_msg] = self.get_outbound_msgs('sms_content')
         self.assertEqual(CTHULHU_SMS, sms_msg['content'])
         self.assertEqual('+41791234567', sms_msg['to_addr'])
 
@@ -387,10 +386,13 @@ class WikipediaWorkerTestCase(ApplicationTestCase, FakeHTTPTestCaseMixin):
         yield start_session()
         yield assert_response('cthulhu', CTHULHU_RESULTS)
 
-        session = yield self.worker.load_session('+41791234567')
+        config = yield self.worker.get_config(self.mkmsg_in())
+        sm = self.worker.get_session_manager(config)
+
+        session = yield self.worker.load_session(sm, '+41791234567')
         self.assertEqual('sections', session['state'])
         yield close_session()
-        session = yield self.worker.load_session('+41791234567')
+        session = yield self.worker.load_session(sm, '+41791234567')
         self.assertEqual({}, session)
 
         yield start_session()
@@ -398,10 +400,10 @@ class WikipediaWorkerTestCase(ApplicationTestCase, FakeHTTPTestCaseMixin):
         yield assert_response('1', CTHULHU_SECTIONS)
         yield assert_response('2', CTHULHU_USSD)
 
-        session = yield self.worker.load_session('+41791234567')
+        session = yield self.worker.load_session(sm, '+41791234567')
         self.assertEqual('more', session['state'])
         yield close_session()
-        session = yield self.worker.load_session('+41791234567')
+        session = yield self.worker.load_session(sm, '+41791234567')
         self.assertEqual('more', session['state'])
         yield self.assert_metrics({
                 'ussd_session_start': 2,
