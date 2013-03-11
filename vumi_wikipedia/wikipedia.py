@@ -98,6 +98,7 @@ class WikipediaWorker(ApplicationWorker):
     """
 
     CONFIG_CLASS = WikipediaConfig
+    ALLOWED_ENDPOINTS = frozenset(['default', 'sms_content'])
 
     @inlineCallbacks
     def setup_application(self):
@@ -391,9 +392,14 @@ class WikipediaWorker(ApplicationWorker):
         if session['sms_offset'] >= len(session['sms_content']):
             session['state'] = None
 
-        yield self.send_to(
-            msg['from_addr'], sms_content, transport_type='sms',
-            endpoint='sms_content')
+        if msg.get_routing_endpoint() == 'default':
+            # We're sending this message in response to a USSD session.
+            yield self.send_to(
+                msg['from_addr'], sms_content, transport_type='sms',
+                endpoint='sms_content')
+        elif msg.get_routing_endpoint() == 'sms_content':
+            # We're sending this message in response to a 'more content' SMS.
+            yield self.reply_to(msg, sms_content)
 
         returnValue(session)
 
