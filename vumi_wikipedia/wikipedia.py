@@ -32,7 +32,7 @@ class WikipediaConfig(ApplicationWorker.CONFIG_CLASS):
     accept_gzip = ConfigBool(
         "If `True`, the HTTP client will request gzipped responses. This is"
         " generally beneficial, although it requires Twisted 11.1 or later.",
-        default=True)
+        default=False)
 
     user_agent = ConfigText(
         "Value of the `User-Agent` header on API requests.",
