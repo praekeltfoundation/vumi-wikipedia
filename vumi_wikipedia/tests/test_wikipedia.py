@@ -259,7 +259,7 @@ class WikipediaWorkerTestCase(ApplicationTestCase, FakeHTTPTestCaseMixin):
                 'sms_transport': 'sphex_sms',
 
                 'api_url': 'https://localhost:1337/',
-                'accept_gzip': False,
+                'accept_gzip': True,
                 'user_agent': 'Bob Howard',
                 'max_session_length': 200,
                 'content_cache_time': 3600,
@@ -271,7 +271,7 @@ class WikipediaWorkerTestCase(ApplicationTestCase, FakeHTTPTestCaseMixin):
 
         yield self.assert_config_knob('api_url', urlparse(self.url),
                                       urlparse('https://localhost:1337/'))
-        yield self.assert_config_knob('accept_gzip', True, False)
+        yield self.assert_config_knob('accept_gzip', False, True)
         yield self.assert_config_knob('user_agent', 'vumi-wikipedia HTTP API',
                                       'Bob Howard')
         yield self.assert_config_knob('max_session_length', 600, 200)
