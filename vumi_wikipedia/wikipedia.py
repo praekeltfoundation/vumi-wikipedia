@@ -394,14 +394,17 @@ class WikipediaWorker(ApplicationWorker):
 
         if msg.get_routing_endpoint() == 'default':
             # We're sending this message in response to a USSD session.
-            yield self.send_to(
-                msg['from_addr'], sms_content, transport_type='sms',
-                endpoint='sms_content')
+            yield self.send_sms_non_reply(msg, config, sms_content)
         elif msg.get_routing_endpoint() == 'sms_content':
             # We're sending this message in response to a 'more content' SMS.
             yield self.reply_to(msg, sms_content)
 
         returnValue(session)
+
+    def send_sms_non_reply(self, msg, config, sms_content):
+        return self.send_to(
+            msg['from_addr'], sms_content, transport_type='sms',
+            endpoint='sms_content')
 
     @inlineCallbacks
     def consume_content_sms_message(self, msg):
