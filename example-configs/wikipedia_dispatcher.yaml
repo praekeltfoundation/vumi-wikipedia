@@ -1,0 +1,17 @@
+receive_inbound_connectors:
+  - sms_telnet_transport
+  - ussd_telnet_transport
+
+receive_outbound_connectors:
+  - wikipedia_app
+
+routing_table:
+  # Transports
+  sms_telnet_transport:
+    default: ['wikipedia_app', 'sms_content']
+  ussd_telnet_transport:
+    default: ['wikipedia_app', 'default']
+  # Application
+  wikipedia_app:
+    default: ['ussd_telnet_transport', 'default']
+    sms_content: ['sms_telnet_transport', 'default']
