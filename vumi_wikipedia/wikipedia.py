@@ -3,7 +3,7 @@
 import json
 
 from twisted.internet.defer import inlineCallbacks, returnValue
-from twisted.python import log
+from vumi import log
 from vumi.application import ApplicationWorker
 from vumi.persist.txredis_manager import TxRedisManager
 from vumi.components.session import SessionManager
