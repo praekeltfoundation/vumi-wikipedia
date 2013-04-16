@@ -259,9 +259,16 @@ class WikipediaWorker(ApplicationWorker):
             session = dict((k, json.dumps(v)) for k, v in session.items())
             return session_manager.save_session(user_id, session)
 
+    def log_action(self, msg, action, **kw):
+        # the empty value should later be replaced with the network operator ID
+        log.msg('\t'.join(
+            [unicode(s) for s in ['WIKI', msg.user(), msg['transport_name'], msg['transport_type'],
+            '', action, msg['content']] + [u'%s=%s'%(k,v) for (k,v) in kw.items()]]
+            ).encode('utf8'))
+
     @inlineCallbacks
     def consume_user_message(self, msg):
-        log.msg("Received: %s" % (msg.payload,))
+        # log.msg("Received: %s" % (msg.payload,))
         config = yield self.get_config(msg)
         user_id = msg.user()
         session_event = self._message_session_event(msg)
@@ -299,6 +306,9 @@ class WikipediaWorker(ApplicationWorker):
             yield session_manager.clear_session(user_id)
 
     def process_message_new(self, msg, config, session):
+        """ Input:  User dialed USSD magic number.
+            Output: Search string prompt."""
+        self.log_action(msg, 'start')
         self.fire_metric('ussd_session_start')
         self.reply_to(
             msg, "What would you like to search Wikipedia for?", True)
@@ -307,6 +317,8 @@ class WikipediaWorker(ApplicationWorker):
 
     @inlineCallbacks
     def process_message_searching(self, msg, config, session):
+        """ Input:  User gives a search query.
+            Output: List of search results (titles)."""
         self.fire_metric('ussd_session_search')
         query = msg['content'].strip()
 
@@ -317,10 +329,12 @@ class WikipediaWorker(ApplicationWorker):
             self.reply_to(msg, msgcontent, True)
             session['state'] = 'sections'
         else:
+            count = 0
             self.fire_metric('ussd_session_search.no_results')
             self.reply_to(
                 msg, 'Sorry, no Wikipedia results for %s' % query, False)
             session['state'] = None
+        self.log_action(msg, 'titles', found=len(results), shown=count)
         returnValue(session)
 
     def select_option(self, options, msg, metric_prefix=None):
@@ -341,11 +355,14 @@ class WikipediaWorker(ApplicationWorker):
 
     @inlineCallbacks
     def process_message_sections(self, msg, config, session):
+        """ Input:  User selects the search result.
+            Output: List of article section titles"""
         self.fire_metric('ussd_session_results')
         selection = self.select_option(json.loads(session['results']), msg,
                                        metric_prefix='ussd_session_results')
         if not selection:
             session['state'] = None
+            self.log_action(msg, 'section-invalid')
             returnValue(session)
 
         session['page'] = json.dumps(selection)
@@ -355,16 +372,20 @@ class WikipediaWorker(ApplicationWorker):
         session['results'] = json.dumps(results[:count])
         self.reply_to(msg, msgcontent, True)
         session['state'] = 'content'
+        self.log_action(msg, 'section', title=selection, found=len(extract.sections), shown=count)
         returnValue(session)
 
     @inlineCallbacks
     def process_message_content(self, msg, config, session):
+        """ Input:  User selects the article section.
+            Output: Section content -> USSD + SMS"""
         self.fire_metric('ussd_session_sections')
         sections = json.loads(session['results'])
         selection = self.select_option(sections, msg,
                                        metric_prefix='ussd_session_sections')
         if not selection:
             session['state'] = None
+            self.log_action(msg, 'content-invalid')
             returnValue(session)
         page = json.loads(session['page'])
         extract = yield self.get_extract(config, page)
@@ -375,6 +396,7 @@ class WikipediaWorker(ApplicationWorker):
             content, '\n(Full content sent by SMS.)')
         self.fire_metric('ussd_session_content')
         self.reply_to(msg, ussd_cont, False)
+        self.log_action(msg, 'ussdcontent', section=selection, content=ussd_cont)
         if config.send_sms_content:
             session = yield self.send_sms_content(msg, config, session)
         if not config.send_more_sms_content:
@@ -398,6 +420,8 @@ class WikipediaWorker(ApplicationWorker):
         elif msg.get_routing_endpoint() == 'sms_content':
             # We're sending this message in response to a 'more content' SMS.
             yield self.reply_to(msg, sms_content)
+        self.log_action(msg, 'smscontent', content=sms_content,
+                        more=(session['state'] is not None))
 
         returnValue(session)
 
@@ -408,12 +432,12 @@ class WikipediaWorker(ApplicationWorker):
 
     @inlineCallbacks
     def consume_content_sms_message(self, msg):
-        log.msg("Received SMS: %s" % (msg.payload,))
+        # log.msg("Received SMS: %s" % (msg.payload,))
         config = yield self.get_config(msg)
 
         # This is to exclude some spurious messages we might receive.
         if msg['content'] is None:
-            log.msg("No content, ignoring.")
+            self.log_action(msg, 'more-no-content')
             return
 
         user_id = msg.user()
@@ -423,6 +447,7 @@ class WikipediaWorker(ApplicationWorker):
         session = yield self.load_session(session_manager, user_id)
         self.fire_metric('sms_more_content_reply')
         if not session:
+            self.log_action(msg, 'more-no-session')
             # TODO: Reply with error?
             self.fire_metric('sms_more_content_reply.no_content')
             return
