@@ -456,6 +456,10 @@ class WikipediaWorker(ApplicationWorker):
             self.fire_metric('sms_more_content_reply.no_content')
             return
 
+        if session['state'] != 'more':
+            self.log_action(msg, 'more-wrong-session-state')
+            return
+
         more_messages = session.get('more_messages', 0) + 1
         session['more_messages'] = more_messages
         if more_messages > 9:

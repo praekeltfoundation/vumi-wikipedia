@@ -414,3 +414,33 @@ class WikipediaWorkerTestCase(ApplicationTestCase, FakeHTTPTestCaseMixin):
                 'ussd_session_sections.2': 1,
                 'ussd_session_content': 1,
                 })
+
+    @inlineCallbacks
+    def test_more_mid_session(self):
+        yield self.start_session()
+        yield self.assert_response('cthulhu', CTHULHU_RESULTS)
+        yield self.assert_response('1', CTHULHU_SECTIONS)
+
+        yield self.dispatch_sms_content(self.mkmsg_in('more'))
+        self.assertEqual([], self.get_outbound_msgs('sms_content'))
+
+        yield self.assert_response('2', CTHULHU_USSD)
+
+        yield self.dispatch_sms_content(self.mkmsg_in('more'))
+        [sms_0, sms_1] = self.get_outbound_msgs('sms_content')
+        self.assertEqual(CTHULHU_SMS, sms_0['content'])
+        self.assertEqual('+41791234567', sms_0['to_addr'])
+        self.assertEqual(CTHULHU_MORE, sms_1['content'])
+        self.assertEqual('+41791234567', sms_1['to_addr'])
+
+        yield self.assert_metrics({
+                'ussd_session_start': 1,
+                'ussd_session_search': 1,
+                'ussd_session_results': 1,
+                'ussd_session_results.1': 1,
+                'ussd_session_sections': 1,
+                'ussd_session_sections.2': 1,
+                'ussd_session_content': 1,
+                'sms_more_content_reply': 2,
+                'sms_more_content_reply.1': 1,
+                })
