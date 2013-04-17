@@ -261,10 +261,12 @@ class WikipediaWorker(ApplicationWorker):
 
     def log_action(self, msg, action, **kw):
         # the empty value should later be replaced with the network operator ID
-        log.msg('\t'.join(
-            [unicode(s) for s in ['WIKI', msg.user(), msg['transport_name'], msg['transport_type'],
-            '', action, msg['content']] + [u'%s=%s'%(k,v) for (k,v) in kw.items()]]
-            ).encode('utf8'))
+        log_parts = [
+            'WIKI', msg.user(), msg['transport_name'], msg['transport_type'],
+            '', action, msg['content'],
+        ] + [u'%s=%s' % (k, v) for (k, v) in kw.items()]
+
+        log.msg('\t'.join(unicode(s) for s in log_parts).encode('utf8'))
 
     @inlineCallbacks
     def consume_user_message(self, msg):
@@ -372,7 +374,8 @@ class WikipediaWorker(ApplicationWorker):
         session['results'] = json.dumps(results[:count])
         self.reply_to(msg, msgcontent, True)
         session['state'] = 'content'
-        self.log_action(msg, 'section', title=selection, found=len(extract.sections), shown=count)
+        self.log_action(msg, 'section', title=selection,
+                        found=len(extract.sections), shown=count)
         returnValue(session)
 
     @inlineCallbacks
@@ -396,7 +399,8 @@ class WikipediaWorker(ApplicationWorker):
             content, '\n(Full content sent by SMS.)')
         self.fire_metric('ussd_session_content')
         self.reply_to(msg, ussd_cont, False)
-        self.log_action(msg, 'ussdcontent', section=selection, content=ussd_cont)
+        self.log_action(
+            msg, 'ussdcontent', section=selection, content=ussd_cont)
         if config.send_sms_content:
             session = yield self.send_sms_content(msg, config, session)
         if not config.send_more_sms_content:
