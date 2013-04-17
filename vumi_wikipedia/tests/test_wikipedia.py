@@ -57,6 +57,9 @@ CTHULHU_END = (
 class WikipediaWorkerTestCase(ApplicationTestCase, FakeHTTPTestCaseMixin):
     application_class = WikipediaWorker
 
+    # Uncomment to make failing tests fail faster:
+    # timout = 1
+
     @inlineCallbacks
     def setUp(self):
         yield super(WikipediaWorkerTestCase, self).setUp()

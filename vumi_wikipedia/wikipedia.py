@@ -300,6 +300,8 @@ class WikipediaWorker(ApplicationWorker):
             session = yield pfunc(msg, config, session)
             yield self.handle_session_result(session_manager, user_id, session)
         except:
+            # Uncomment to raise instead of logging (useful for tests)
+            # raise
             log.err()
             self.fire_metric('ussd_session_error')
             self.reply_to(
