@@ -13,7 +13,8 @@ from vumi.config import (
     ConfigUrl, ConfigBool, ConfigText, ConfigInt, ConfigDict)
 
 from vumi_wikipedia.wikipedia_api import WikipediaAPI, ArticleExtract
-from vumi_wikipedia.text_manglers import normalize_whitespace, ContentFormatter
+from vumi_wikipedia.text_manglers import (
+    ContentFormatter, normalize_whitespace, transliterate_unicode, minimize_unicode)
 
 
 def mkmenu(options, prefix, start=1):
@@ -58,6 +59,14 @@ class WikipediaConfig(ApplicationWorker.CONFIG_CLASS):
         "If a sentence break is found within this many characters of the end"
         " of the truncated message, truncate at the sentence break instead of"
         " a word break.", default=10)
+
+    transliterate_unicode = ConfigBool(
+        "Set this to `True` to transliterate any non-ASCII chars. Requires unidecode lib.",
+        default=False)
+
+    minimize_text = ConfigBool(
+        "Set this to `True` to attempt to shorten text by removing unnecessary chars.",
+        default=False)
 
     send_sms_content = ConfigBool(
         "Set this to `False` to suppress the sending of content via SMS.",
@@ -381,8 +390,15 @@ class WikipediaWorker(ApplicationWorker):
                         found=len(extract.sections), shown=count)
         returnValue(session)
 
-    def normalize_content(self, content):
-        return normalize_whitespace(content)
+    def normalize_content(self, config, content):
+        text = content
+        if config.transliterate_unicode:
+            text = transliterate_unicode(text)
+        sms = text
+        sms = normalize_whitespace(text)
+        if config.minimize_text:
+            sms = minimize_unicode(sms)
+        return (text, sms)
 
     @inlineCallbacks
     def process_message_content(self, msg, config, session):
@@ -399,16 +415,16 @@ class WikipediaWorker(ApplicationWorker):
         page = json.loads(session['page'])
         extract = yield self.get_extract(config, page)
         content = extract.sections[index].full_text()
-        normalized_content = self.normalize_content(content)
-        session['sms_content'] = normalized_content
+        ussd_text, sms_text = self.normalize_content(config, content)
+        session['sms_content'] = sms_text
         session['sms_offset'] = 0
         ussd_cont = self.get_ussd_formatter(config).format(
-            content, '\n(Full content sent by SMS.)')
+            ussd_text, '\n(Full content sent by SMS.)')
         self.fire_metric('ussd_session_content')
         self.reply_to(msg, ussd_cont, False)
         self.log_action(
             msg, 'ussdcontent', section=selection,
-            contentLen=len(content), normContentLen=len(normalized_content),
+            contentLen=len(content), smsLen=len(sms_text),
             content=ussd_cont)
         if config.send_sms_content:
             session = yield self.send_sms_content(msg, config, session)
