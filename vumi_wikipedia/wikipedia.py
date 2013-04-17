@@ -346,24 +346,25 @@ class WikipediaWorker(ApplicationWorker):
 
         if response.isdigit():
             try:
-                result = options[int(response) - 1]
-                self.fire_metric(metric_prefix, int(response))
-                return result
+                index = int(response) - 1
+                result = options[index]
+                self.fire_metric(metric_prefix, index + 1)
+                return (result, index)
             except (KeyError, IndexError):
                 pass
         self.fire_metric(metric_prefix, 'invalid')
         self.reply_to(msg,
                       'Sorry, invalid selection. Please restart and try again',
                       False)
-        return None
+        return (None, None)
 
     @inlineCallbacks
     def process_message_sections(self, msg, config, session):
         """ Input:  User selects the search result.
             Output: List of article section titles"""
         self.fire_metric('ussd_session_results')
-        selection = self.select_option(json.loads(session['results']), msg,
-                                       metric_prefix='ussd_session_results')
+        selection, index = self.select_option(json.loads(session['results']), msg,
+                                              metric_prefix='ussd_session_results')
         if not selection:
             session['state'] = None
             self.log_action(msg, 'section-invalid')
@@ -380,29 +381,35 @@ class WikipediaWorker(ApplicationWorker):
                         found=len(extract.sections), shown=count)
         returnValue(session)
 
+    def normalize_content(self, content):
+        return normalize_whitespace(content)
+
     @inlineCallbacks
     def process_message_content(self, msg, config, session):
         """ Input:  User selects the article section.
             Output: Section content -> USSD + SMS"""
         self.fire_metric('ussd_session_sections')
         sections = json.loads(session['results'])
-        selection = self.select_option(sections, msg,
-                                       metric_prefix='ussd_session_sections')
+        selection, index = self.select_option(sections, msg,
+                                              metric_prefix='ussd_session_sections')
         if not selection:
             session['state'] = None
             self.log_action(msg, 'content-invalid')
             returnValue(session)
         page = json.loads(session['page'])
         extract = yield self.get_extract(config, page)
-        content = extract.sections[int(msg['content'].strip()) - 1].full_text()
-        session['sms_content'] = normalize_whitespace(content)
+        content = extract.sections[index].full_text()
+        normalized_content = self.normalize_content(content)
+        session['sms_content'] = normalized_content
         session['sms_offset'] = 0
         ussd_cont = self.get_ussd_formatter(config).format(
             content, '\n(Full content sent by SMS.)')
         self.fire_metric('ussd_session_content')
         self.reply_to(msg, ussd_cont, False)
         self.log_action(
-            msg, 'ussdcontent', section=selection, content=ussd_cont)
+            msg, 'ussdcontent', section=selection,
+            contentLen=len(content), normContentLen=len(normalized_content),
+            content=ussd_cont)
         if config.send_sms_content:
             session = yield self.send_sms_content(msg, config, session)
         if not config.send_more_sms_content:
