@@ -217,7 +217,7 @@ class WikipediaWorker(ApplicationWorker):
         key = ':'.join([wikipedia.url, title])
         data = yield self.extract_redis.get(key)
         if data is None:
-            extract = yield wikipedia.get_extract(config, title)
+            extract = yield self.get_wikipedia_api(config).get_extract(title)
             # We do this in two steps because our redis clients disagree on
             # what SETEX should look like.
             yield self.extract_redis.set(key, extract.to_json())
