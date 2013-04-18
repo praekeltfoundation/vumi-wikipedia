@@ -53,6 +53,23 @@ CTHULHU_END = (
     u'...anxious to preserve its conservatism, had found him quite hopeless. '
     u'(end of section)')
 
+CTHULHU_USSD_UNICODE = (
+    u"It was a simple, rambling thing\u2014a ...\n(Full content sent by SMS.)")
+
+CTHULHU_SMS_UNICODE = (
+    u"It was a simple, rambling thing\u2014a naive sailor's ... (reply for "
+    u"more)")
+
+CTHULHU_USSD_TRANSLITERATED = (
+    u"It was a simple, rambling thing--a naive sailor's effort at a "
+    u"post-facto diary--and strove to recall day by day that last awful "
+    u"...\n(Full content sent by SMS.)")
+
+CTHULHU_SMS_TRANSLITERATED = (
+    u"It was a simple, rambling thing--a naive sailor's effort at a "
+    u"post-facto diary--and strove to recall day by day that last awful "
+    u"voyage. ... (reply for more)")
+
 
 class WikipediaWorkerTestCase(ApplicationTestCase, FakeHTTPTestCaseMixin):
     application_class = WikipediaWorker
@@ -476,3 +493,33 @@ class WikipediaWorkerTestCase(ApplicationTestCase, FakeHTTPTestCaseMixin):
                 'sms_more_content_reply': 2,
                 'sms_more_content_reply.1': 1,
                 })
+
+    @inlineCallbacks
+    def test_unicode_content(self):
+        yield self.setup_application({
+            'transliterate_unicode': False,
+        })
+
+        yield self.start_session()
+        yield self.assert_response('cthulhu', CTHULHU_RESULTS)
+        yield self.assert_response('1', CTHULHU_SECTIONS)
+        yield self.assert_response('4', CTHULHU_USSD_UNICODE)
+
+        [sms_msg] = self.get_outbound_msgs('sms_content')
+        self.assertEqual(CTHULHU_SMS_UNICODE, sms_msg['content'])
+        self.assertEqual('+41791234567', sms_msg['to_addr'])
+
+    @inlineCallbacks
+    def test_transliterate_unicode(self):
+        yield self.setup_application({
+            'transliterate_unicode': True,
+        })
+
+        yield self.start_session()
+        yield self.assert_response('cthulhu', CTHULHU_RESULTS)
+        yield self.assert_response('1', CTHULHU_SECTIONS)
+        yield self.assert_response('4', CTHULHU_USSD_TRANSLITERATED)
+
+        [sms_msg] = self.get_outbound_msgs('sms_content')
+        self.assertEqual(CTHULHU_SMS_TRANSLITERATED, sms_msg['content'])
+        self.assertEqual('+41791234567', sms_msg['to_addr'])
