@@ -14,7 +14,8 @@ from vumi.config import (
 
 from vumi_wikipedia.wikipedia_api import WikipediaAPI, ArticleExtract
 from vumi_wikipedia.text_manglers import (
-    ContentFormatter, normalize_whitespace, transliterate_unicode, minimize_unicode)
+    ContentFormatter, normalize_whitespace, transliterate_unicode,
+    minimize_unicode)
 
 
 def mkmenu(options, prefix, start=1):
@@ -61,12 +62,12 @@ class WikipediaConfig(ApplicationWorker.CONFIG_CLASS):
         " a word break.", default=10)
 
     transliterate_unicode = ConfigBool(
-        "Set this to `True` to transliterate any non-ASCII chars. Requires unidecode lib.",
-        default=False)
+        "Set this to `True` to transliterate any non-ASCII chars. Requires"
+        " unidecode lib.", default=False)
 
     minimize_text = ConfigBool(
-        "Set this to `True` to attempt to shorten text by removing unnecessary chars.",
-        default=False)
+        "Set this to `True` to attempt to shorten text by removing unnecessary"
+        " chars.", default=False)
 
     send_sms_content = ConfigBool(
         "Set this to `False` to suppress the sending of content via SMS.",
@@ -372,8 +373,9 @@ class WikipediaWorker(ApplicationWorker):
         """ Input:  User selects the search result.
             Output: List of article section titles"""
         self.fire_metric('ussd_session_results')
-        selection, index = self.select_option(json.loads(session['results']), msg,
-                                              metric_prefix='ussd_session_results')
+        selection, index = self.select_option(
+            json.loads(session['results']), msg,
+            metric_prefix='ussd_session_results')
         if not selection:
             session['state'] = None
             self.log_action(msg, 'section-invalid')
@@ -406,8 +408,8 @@ class WikipediaWorker(ApplicationWorker):
             Output: Section content -> USSD + SMS"""
         self.fire_metric('ussd_session_sections')
         sections = json.loads(session['results'])
-        selection, index = self.select_option(sections, msg,
-                                              metric_prefix='ussd_session_sections')
+        selection, index = self.select_option(
+            sections, msg, metric_prefix='ussd_session_sections')
         if not selection:
             session['state'] = None
             self.log_action(msg, 'content-invalid')

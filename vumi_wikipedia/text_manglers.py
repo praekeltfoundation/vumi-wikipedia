@@ -4,8 +4,10 @@ import unicodedata
 import re
 try:
     from unidecode import unidecode
+    unidecode  # To keep pyflakes happy
 except ImportError:
     unidecode = None
+
 
 def unicode_ord(name):
     return ord(unicodedata.lookup(name))
@@ -42,12 +44,14 @@ MINIMIZE_REGEX = [
     (re.compile(u' -+ | ?--+ ?'), '--'),
     ]
 
+
 def minimize_unicode(text):
     """Remove as much as possible from the text without loosing text's meaning.
     Perform this after all other normalizations are done."""
     for regex, repl in MINIMIZE_REGEX:
         text = regex.sub(repl, text)
     return text
+
 
 def normalize_whitespace(text):
     """Replace each whitespace sequence with a single space.
