@@ -296,10 +296,11 @@ class WikipediaWorkerTestCase(ApplicationTestCase, FakeHTTPTestCaseMixin):
                 })
 
         yield self.assert_config_knob('api_url', urlparse(self.url),
-                                      urlparse('https://localhost:1337/'))
+             urlparse('https://localhost:1337/'))
         yield self.assert_config_knob('accept_gzip', False, True)
-        yield self.assert_config_knob('user_agent', 'vumi-wikipedia HTTP API',
-                                      'Bob Howard')
+        yield self.assert_config_knob('user_agent',
+            'vumi-wikipedia/1.0 (https://github.com/praekelt/vumi-wikipedia; support@vumi.org)',
+            'Bob Howard')
         yield self.assert_config_knob('max_session_length', 600, 200)
         yield self.assert_config_knob('content_cache_time', 0, 3600)
         yield self.assert_config_knob('max_ussd_content_length', 160, 180)
