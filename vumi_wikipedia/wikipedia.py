@@ -202,6 +202,9 @@ class WikipediaWorker(ApplicationWorker):
         """
         Turn a list of results into an enumerated multiple choice list
         """
+        # Normalize all text for USSD (minimize, transliterate, etc)
+        options = [self.normalize_content(config, v)[0] for v in options] 
+
         joined = mkmenu(options, prefix, start)
         while len(joined) > config.max_ussd_content_length:
             if not options:

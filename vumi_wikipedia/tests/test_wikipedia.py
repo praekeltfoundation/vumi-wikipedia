@@ -53,22 +53,19 @@ CTHULHU_END = (
     u'...anxious to preserve its conservatism, had found him quite hopeless. '
     u'(end of section)')
 
-CTHULHU_USSD_UNICODE = (
-    u"It was a simple, rambling thing\u2014a ...\n(Full content sent by SMS.)")
+WIKIPEDIA_RESULTS = u'1. Wikipedia\n2. Wikip\xe9dia\n3. Main Page'
+WIKIPEDIA_SECTIONS = u'1. Wikip\xe9dia'
+WIKIPEDIA_USSD = u'Wikip\xe9dia may refer to:\nFrench ...\n(Full content sent by SMS.)'
+WIKIPEDIA_SMS = u'Wikip\xe9dia may refer to: French Wikipedia ... (reply for more)'
 
-CTHULHU_SMS_UNICODE = (
-    u"It was a simple, rambling thing\u2014a naive sailor's ... (reply for "
-    u"more)")
-
-CTHULHU_USSD_TRANSLITERATED = (
-    u"It was a simple, rambling thing--a naive sailor's effort at a "
-    u"post-facto diary--and strove to recall day by day that last awful "
-    u"...\n(Full content sent by SMS.)")
-
-CTHULHU_SMS_TRANSLITERATED = (
-    u"It was a simple, rambling thing--a naive sailor's effort at a "
-    u"post-facto diary--and strove to recall day by day that last awful "
-    u"voyage. ... (reply for more)")
+WIKIPEDIA_RESULTS_TL = u'1. Wikipedia\n2. Wikipedia\n3. Main Page'
+WIKIPEDIA_SECTIONS_TL = u'1. Wikipedia'
+WIKIPEDIA_USSD_TL = (
+    u'Wikipedia may refer to:\nFrench Wikipedia\nPortuguese Wikipedia\n'
+    u'Hungarian Wikipedia\nSlovak Wikipedia\n(Full content sent by SMS.)')
+WIKIPEDIA_SMS_TL = (
+    u'Wikipedia may refer to: French Wikipedia Portuguese '
+    u'Wikipedia Hungarian Wikipedia Slovak Wikipedia (end of section)')
 
 
 class WikipediaWorkerTestCase(ApplicationTestCase, FakeHTTPTestCaseMixin):
@@ -501,12 +498,12 @@ class WikipediaWorkerTestCase(ApplicationTestCase, FakeHTTPTestCaseMixin):
         })
 
         yield self.start_session()
-        yield self.assert_response('cthulhu', CTHULHU_RESULTS)
-        yield self.assert_response('1', CTHULHU_SECTIONS)
-        yield self.assert_response('4', CTHULHU_USSD_UNICODE)
+        yield self.assert_response('wikipedia', WIKIPEDIA_RESULTS)
+        yield self.assert_response('2', WIKIPEDIA_SECTIONS)
+        yield self.assert_response('1', WIKIPEDIA_USSD)
 
         [sms_msg] = self.get_outbound_msgs('sms_content')
-        self.assertEqual(CTHULHU_SMS_UNICODE, sms_msg['content'])
+        self.assertEqual(WIKIPEDIA_SMS, sms_msg['content'])
         self.assertEqual('+41791234567', sms_msg['to_addr'])
 
     @inlineCallbacks
@@ -516,10 +513,10 @@ class WikipediaWorkerTestCase(ApplicationTestCase, FakeHTTPTestCaseMixin):
         })
 
         yield self.start_session()
-        yield self.assert_response('cthulhu', CTHULHU_RESULTS)
-        yield self.assert_response('1', CTHULHU_SECTIONS)
-        yield self.assert_response('4', CTHULHU_USSD_TRANSLITERATED)
+        yield self.assert_response('wikipedia', WIKIPEDIA_RESULTS_TL)
+        yield self.assert_response('2', WIKIPEDIA_SECTIONS_TL)
+        yield self.assert_response('1', WIKIPEDIA_USSD_TL)
 
         [sms_msg] = self.get_outbound_msgs('sms_content')
-        self.assertEqual(CTHULHU_SMS_TRANSLITERATED, sms_msg['content'])
+        self.assertEqual(WIKIPEDIA_SMS_TL, sms_msg['content'])
         self.assertEqual('+41791234567', sms_msg['to_addr'])
