@@ -62,6 +62,12 @@
         "response_body": "Bad response."
     },
 
+    "GET /?redirects=1&format=json&prop=extracts&titles=Wikip%C3%A9dia&action=query&exsectionformat=raw&explaintext=": {
+        "request_body": "",
+        "response_code": "200 OK",
+        "response_body": {"query":{"pages":{"2316250":{"pageid":2316250,"ns":0,"title":"Wikip\u00e9dia","extract":"Wikip\u00e9dia may refer to:\nFrench Wikipedia\nPortuguese Wikipedia\nHungarian Wikipedia\nSlovak Wikipedia"}}}}
+    },
+
     "So I don't have to keep screwing around with trailing commas.": null
 
 }
