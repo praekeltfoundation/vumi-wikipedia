@@ -5,6 +5,7 @@ setup(
     version='0.1a',
     description='Vumi Wikipedia App',
     packages=find_packages(),
+    include_package_data=True,
     install_requires=[
         'vumi > 0.3.1',
     ],
