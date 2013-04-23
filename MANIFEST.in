@@ -1,0 +1,13 @@
+# Source distribution files.
+include .coveragerc
+include LICENSE
+include README
+include requirements.pip
+include setup.py
+
+# Python package data files.
+include vumi_wikipedia/tests/wikipedia_responses.json
+
+# Prune stray bytecode files.
+global-exclude *.pyc
+global-exclude __pycache__
