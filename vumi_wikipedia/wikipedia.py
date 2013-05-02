@@ -13,7 +13,9 @@ from vumi.config import (
     ConfigUrl, ConfigBool, ConfigText, ConfigInt, ConfigDict)
 
 from vumi_wikipedia.wikipedia_api import WikipediaAPI, ArticleExtract
-from vumi_wikipedia.text_manglers import normalize_whitespace, ContentFormatter
+from vumi_wikipedia.text_manglers import (
+    ContentFormatter, normalize_whitespace, transliterate_unicode,
+    minimize_unicode)
 
 
 def mkmenu(options, prefix, start=1):
@@ -36,7 +38,8 @@ class WikipediaConfig(ApplicationWorker.CONFIG_CLASS):
 
     user_agent = ConfigText(
         "Value of the `User-Agent` header on API requests.",
-        default='vumi-wikipedia HTTP API')
+        default=('vumi-wikipedia/1.0 (https://github.com/praekelt/vumi-'
+                 'wikipedia; support@vumi.org)'))
 
     max_session_length = ConfigInt(
         "Lifetime of query session in seconds. This includes the lifetime of"
@@ -59,6 +62,14 @@ class WikipediaConfig(ApplicationWorker.CONFIG_CLASS):
         " of the truncated message, truncate at the sentence break instead of"
         " a word break.", default=10)
 
+    transliterate_unicode = ConfigBool(
+        "Set this to `True` to transliterate any non-ASCII chars. Requires"
+        " unidecode lib.", default=False)
+
+    minimize_text = ConfigBool(
+        "Set this to `True` to attempt to shorten text by removing unnecessary"
+        " chars.", default=False)
+
     send_sms_content = ConfigBool(
         "Set this to `False` to suppress the sending of content via SMS.",
         default=True)
@@ -66,16 +77,6 @@ class WikipediaConfig(ApplicationWorker.CONFIG_CLASS):
     send_more_sms_content = ConfigBool(
         "Set this to `False` to ignore requests for more content via SMS.",
         default=True)
-
-    more_content_suffix = ConfigText(
-        "Suffix for SMS content that can be continued. An empty string"
-        " should be specified if there is no incoming SMS connection.",
-        default=' (reply for more)')
-
-    no_more_content_suffix = ConfigText(
-        "Suffix for SMS content that is complete. An empty string should be "
-        " specified if there is no incoming SMS connection.",
-        default=' (end of section)')
 
     metrics_prefix = ConfigText(
         "Prefix for metrics names. If unset, no metrics will be collected.",
@@ -87,6 +88,37 @@ class WikipediaConfig(ApplicationWorker.CONFIG_CLASS):
 
     redis_manager = ConfigDict(
         "Redis connection configuration.", static=True, default={})
+
+    msg_prompt = ConfigText(
+        'Initial prompt shown to the users',
+        default=u'What would you like to search Wikipedia for?')
+
+    msg_no_results = ConfigText(
+        'No results found message, with one string parameter',
+        default=u'Sorry, no Wikipedia results for %s')
+
+    msg_error = ConfigText(
+        'Generic internal error message',
+        default=u'Sorry, there was an error processing your request.'
+        ' Please try again later.')
+
+    msg_invalid_section = ConfigText(
+        'User picked incorrect section',
+        default=u'Sorry, invalid selection. Please restart and try again')
+
+    msg_more_content_suffix = ConfigText(
+        "Suffix for SMS content that can be continued. An empty string"
+        " should be specified if there is no incoming SMS connection.",
+        default=' (reply for more)')
+
+    msg_no_more_content_suffix = ConfigText(
+        "Suffix for SMS content that is complete. An empty string should be "
+        " specified if there is no incoming SMS connection.",
+        default=' (end of section)')
+
+    msg_ussd_suffix = ConfigText(
+        'Message to add at the end of the truncated USSD result',
+        default=u'\n(Full content sent by SMS.)')
 
 
 class WikipediaWorker(ApplicationWorker):
@@ -192,6 +224,9 @@ class WikipediaWorker(ApplicationWorker):
         """
         Turn a list of results into an enumerated multiple choice list
         """
+        # Normalize all text for USSD (minimize, transliterate, etc)
+        options = [self.normalize_content(config, v)[0] for v in options]
+
         joined = mkmenu(options, prefix, start)
         while len(joined) > config.max_ussd_content_length:
             if not options:
@@ -207,7 +242,7 @@ class WikipediaWorker(ApplicationWorker):
         key = ':'.join([wikipedia.url, title])
         data = yield self.extract_redis.get(key)
         if data is None:
-            extract = yield wikipedia.get_extract(config, title)
+            extract = yield self.get_wikipedia_api(config).get_extract(title)
             # We do this in two steps because our redis clients disagree on
             # what SETEX should look like.
             yield self.extract_redis.set(key, extract.to_json())
@@ -264,9 +299,9 @@ class WikipediaWorker(ApplicationWorker):
         log_parts = [
             'WIKI', msg.user(), msg['transport_name'], msg['transport_type'],
             '', action, msg['content'],
-        ] + [u'%s=%s' % (k, v) for (k, v) in kw.items()]
+        ] + [u'%s=%r' % (k, v) for (k, v) in kw.items()]
 
-        log.msg('\t'.join(unicode(s) for s in log_parts).encode('utf8'))
+        log.msg(u'\t'.join(unicode(s) for s in log_parts).encode('utf8'))
 
     @inlineCallbacks
     def consume_user_message(self, msg):
@@ -304,9 +339,7 @@ class WikipediaWorker(ApplicationWorker):
             # raise
             log.err()
             self.fire_metric('ussd_session_error')
-            self.reply_to(
-                msg, 'Sorry, there was an error processing your request. '
-                'Please try again later.', False)
+            self.reply_to(msg, config.msg_error, False)
             yield session_manager.clear_session(user_id)
 
     def process_message_new(self, msg, config, session):
@@ -314,8 +347,7 @@ class WikipediaWorker(ApplicationWorker):
             Output: Search string prompt."""
         self.log_action(msg, 'start')
         self.fire_metric('ussd_session_start')
-        self.reply_to(
-            msg, "What would you like to search Wikipedia for?", True)
+        self.reply_to(msg, config.msg_prompt, True)
         session['state'] = 'searching'
         return session
 
@@ -335,13 +367,12 @@ class WikipediaWorker(ApplicationWorker):
         else:
             count = 0
             self.fire_metric('ussd_session_search.no_results')
-            self.reply_to(
-                msg, 'Sorry, no Wikipedia results for %s' % query, False)
+            self.reply_to(msg, config.msg_no_results % query, False)
             session['state'] = None
         self.log_action(msg, 'titles', found=len(results), shown=count)
         returnValue(session)
 
-    def select_option(self, options, msg, metric_prefix=None):
+    def select_option(self, config, options, msg, metric_prefix=None):
         response = msg['content'].strip()
 
         if response.isdigit():
@@ -353,9 +384,7 @@ class WikipediaWorker(ApplicationWorker):
             except (KeyError, IndexError):
                 pass
         self.fire_metric(metric_prefix, 'invalid')
-        self.reply_to(msg,
-                      'Sorry, invalid selection. Please restart and try again',
-                      False)
+        self.reply_to(msg, config.msg_invalid_section, False)
         return (None, None)
 
     @inlineCallbacks
@@ -363,8 +392,10 @@ class WikipediaWorker(ApplicationWorker):
         """ Input:  User selects the search result.
             Output: List of article section titles"""
         self.fire_metric('ussd_session_results')
-        selection, index = self.select_option(json.loads(session['results']), msg,
-                                              metric_prefix='ussd_session_results')
+        selection, index = self.select_option(
+            config,
+            json.loads(session['results']), msg,
+            metric_prefix='ussd_session_results')
         if not selection:
             session['state'] = None
             self.log_action(msg, 'section-invalid')
@@ -381,8 +412,15 @@ class WikipediaWorker(ApplicationWorker):
                         found=len(extract.sections), shown=count)
         returnValue(session)
 
-    def normalize_content(self, content):
-        return normalize_whitespace(content)
+    def normalize_content(self, config, content):
+        text = content
+        if config.transliterate_unicode:
+            text = transliterate_unicode(text)
+        sms = text
+        sms = normalize_whitespace(text)
+        if config.minimize_text:
+            sms = minimize_unicode(sms)
+        return (text, sms)
 
     @inlineCallbacks
     def process_message_content(self, msg, config, session):
@@ -390,8 +428,8 @@ class WikipediaWorker(ApplicationWorker):
             Output: Section content -> USSD + SMS"""
         self.fire_metric('ussd_session_sections')
         sections = json.loads(session['results'])
-        selection, index = self.select_option(sections, msg,
-                                              metric_prefix='ussd_session_sections')
+        selection, index = self.select_option(
+            config, sections, msg, metric_prefix='ussd_session_sections')
         if not selection:
             session['state'] = None
             self.log_action(msg, 'content-invalid')
@@ -399,16 +437,16 @@ class WikipediaWorker(ApplicationWorker):
         page = json.loads(session['page'])
         extract = yield self.get_extract(config, page)
         content = extract.sections[index].full_text()
-        normalized_content = self.normalize_content(content)
-        session['sms_content'] = normalized_content
+        ussd_text, sms_text = self.normalize_content(config, content)
+        session['sms_content'] = sms_text
         session['sms_offset'] = 0
         ussd_cont = self.get_ussd_formatter(config).format(
-            content, '\n(Full content sent by SMS.)')
+            ussd_text, config.msg_ussd_suffix)
         self.fire_metric('ussd_session_content')
         self.reply_to(msg, ussd_cont, False)
         self.log_action(
             msg, 'ussdcontent', section=selection,
-            contentLen=len(content), normContentLen=len(normalized_content),
+            contentLen=len(content), smsLen=len(sms_text),
             content=ussd_cont)
         if config.send_sms_content:
             session = yield self.send_sms_content(msg, config, session)
@@ -422,7 +460,7 @@ class WikipediaWorker(ApplicationWorker):
     def send_sms_content(self, msg, config, session):
         content_len, sms_content = self.get_sms_formatter(config).format_more(
             session['sms_content'], session['sms_offset'],
-            config.more_content_suffix, config.no_more_content_suffix)
+            config.msg_more_content_suffix, config.msg_no_more_content_suffix)
         session['sms_offset'] = session['sms_offset'] + content_len + 1
         if session['sms_offset'] >= len(session['sms_content']):
             session['state'] = None

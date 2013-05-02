@@ -2,6 +2,11 @@
 
 import unicodedata
 import re
+try:
+    from unidecode import unidecode
+    unidecode  # To keep pyflakes happy
+except ImportError:
+    unidecode = None
 
 
 def unicode_ord(name):
@@ -26,6 +31,26 @@ def convert_unicode(text):
 
     text = unicodedata.normalize('NFKC', text)
     return text.translate(UNICODE_CONVERSION_MAPPING)
+
+
+def transliterate_unicode(text):
+    """Convert unicode to the equivalent ASCII representation"""
+    if unidecode is None:
+        raise RuntimeError('Missing library, run "pip install unidecode"')
+    return unidecode(text)
+
+
+MINIMIZE_REGEX = [
+    (re.compile(u' -+ | ?--+ ?'), '--'),
+    ]
+
+
+def minimize_unicode(text):
+    """Remove as much as possible from the text without loosing text's meaning.
+    Perform this after all other normalizations are done."""
+    for regex, repl in MINIMIZE_REGEX:
+        text = regex.sub(repl, text)
+    return text
 
 
 def normalize_whitespace(text):

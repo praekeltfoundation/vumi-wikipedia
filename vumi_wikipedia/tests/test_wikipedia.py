@@ -53,25 +53,46 @@ CTHULHU_END = (
     u'...anxious to preserve its conservatism, had found him quite hopeless. '
     u'(end of section)')
 
+WIKIPEDIA_RESULTS = u'1. Wikipedia\n2. Wikip\xe9dia\n3. Main Page'
+WIKIPEDIA_SECTIONS = u'1. Wikip\xe9dia'
+WIKIPEDIA_USSD = (
+    u'Wikip\xe9dia may refer to:\nFrench ...\n(Full content sent by SMS.)')
+WIKIPEDIA_SMS = (
+    u'Wikip\xe9dia may refer to: French Wikipedia ... (reply for more)')
+
+WIKIPEDIA_RESULTS_TL = u'1. Wikipedia\n2. Wikipedia\n3. Main Page'
+WIKIPEDIA_SECTIONS_TL = u'1. Wikipedia'
+WIKIPEDIA_USSD_TL = (
+    u'Wikipedia may refer to:\nFrench Wikipedia\nPortuguese Wikipedia\n'
+    u'Hungarian Wikipedia\nSlovak Wikipedia\n(Full content sent by SMS.)')
+WIKIPEDIA_SMS_TL = (
+    u'Wikipedia may refer to: French Wikipedia Portuguese '
+    u'Wikipedia Hungarian Wikipedia Slovak Wikipedia (end of section)')
+
 
 class WikipediaWorkerTestCase(ApplicationTestCase, FakeHTTPTestCaseMixin):
     application_class = WikipediaWorker
 
     # Uncomment to make failing tests fail faster:
-    # timout = 1
+    # timeout = 1
 
     @inlineCallbacks
     def setUp(self):
         yield super(WikipediaWorkerTestCase, self).setUp()
         yield self.start_webserver(WIKIPEDIA_RESPONSES)
-        self.worker = yield self.get_application({
-                'transport_name': self.transport_name,
-                'worker_name': 'wikitest',
-                'sms_transport': 'sphex_sms',
-                'api_url': self.url,
-                'incoming_sms_transport': 'sphex_more',
-                'metrics_prefix': 'test.metrics.wikipedia',
-                })
+
+    @inlineCallbacks
+    def setup_application(self, config={}, use_defaults=True):
+        defaults = {
+            'transport_name': self.transport_name,
+            'worker_name': 'wikitest',
+            'api_url': self.url,
+            'metrics_prefix': 'test.metrics.wikipedia',
+        }
+        defaults.update(config)
+        if use_defaults:
+            config = defaults
+        self.worker = yield self.get_application(config)
 
     @inlineCallbacks
     def replace_application(self, config):
@@ -126,12 +147,14 @@ class WikipediaWorkerTestCase(ApplicationTestCase, FakeHTTPTestCaseMixin):
 
     @inlineCallbacks
     def test_make_options(self):
+        yield self.setup_application()
         config = yield self.worker.get_config(self.mkmsg_in())
         self.assertEqual((2, "1. foo\n2. bar"),
                          self.worker.make_options(config, ['foo', 'bar']))
 
     @inlineCallbacks
     def test_happy_flow(self):
+        yield self.setup_application()
         yield self.start_session()
         yield self.assert_response('cthulhu', CTHULHU_RESULTS)
         yield self.assert_response('1', CTHULHU_SECTIONS)
@@ -152,31 +175,27 @@ class WikipediaWorkerTestCase(ApplicationTestCase, FakeHTTPTestCaseMixin):
 
     @inlineCallbacks
     def test_no_metrics_prefix(self):
-        yield self.replace_application({
-                'transport_name': self.transport_name,
-                'worker_name': 'wikitest',
-                'api_url': self.url,
-                })
+        yield self.setup_application({
+            'transport_name': self.transport_name,
+            'worker_name': 'wikitest',
+            'api_url': self.url,
+        }, use_defaults=False)
         self.worker.fire_metric('foo')
         # Make sure it's safe to fire a metric when we aren't collecting them.
         self.assertEqual(self.worker.metrics, None)
 
     @inlineCallbacks
-    def test_no_sms_transport(self):
-        yield self.replace_application({
-                'transport_name': self.transport_name,
-                'worker_name': 'wikitest',
-                'api_url': self.url,
-                'metrics_prefix': 'test.metrics.wikipedia',
-                })
+    def test_no_sms_config(self):
+        yield self.setup_application({
+            'send_sms_content': False,
+        })
 
         yield self.start_session()
         yield self.assert_response('cthulhu', CTHULHU_RESULTS)
         yield self.assert_response('1', CTHULHU_SECTIONS)
         yield self.assert_response('2', CTHULHU_USSD)
 
-        self.assertEqual(
-            [], self._amqp.get_messages('vumi', 'sphex_sms.outbound'))
+        self.assertEqual([], self.get_outbound_msgs('sms_content'))
         yield self.assert_metrics({
                 'ussd_session_start': 1,
                 'ussd_session_search': 1,
@@ -189,6 +208,7 @@ class WikipediaWorkerTestCase(ApplicationTestCase, FakeHTTPTestCaseMixin):
 
     @inlineCallbacks
     def test_invalid_selection_not_digit(self):
+        yield self.setup_application()
         yield self.start_session()
         yield self.assert_response('cthulhu', CTHULHU_RESULTS)
         yield self.assert_response(
@@ -202,6 +222,7 @@ class WikipediaWorkerTestCase(ApplicationTestCase, FakeHTTPTestCaseMixin):
 
     @inlineCallbacks
     def test_invalid_selection_bad_index(self):
+        yield self.setup_application()
         yield self.start_session()
         yield self.assert_response('cthulhu', CTHULHU_RESULTS)
         yield self.assert_response(
@@ -215,6 +236,7 @@ class WikipediaWorkerTestCase(ApplicationTestCase, FakeHTTPTestCaseMixin):
 
     @inlineCallbacks
     def test_invalid_selection_later(self):
+        yield self.setup_application()
         yield self.start_session()
         yield self.assert_response('cthulhu', CTHULHU_RESULTS)
         yield self.assert_response('1', CTHULHU_SECTIONS)
@@ -231,6 +253,7 @@ class WikipediaWorkerTestCase(ApplicationTestCase, FakeHTTPTestCaseMixin):
 
     @inlineCallbacks
     def test_search_no_results(self):
+        yield self.setup_application()
         yield self.start_session()
         yield self.assert_response(
             'ncdkiuagdqpowebjkcs',
@@ -243,6 +266,7 @@ class WikipediaWorkerTestCase(ApplicationTestCase, FakeHTTPTestCaseMixin):
 
     @inlineCallbacks
     def test_search_error(self):
+        yield self.setup_application()
         yield self.start_session()
         yield self.assert_response(
             '.', ('Sorry, there was an error processing your request. Please '
@@ -256,6 +280,7 @@ class WikipediaWorkerTestCase(ApplicationTestCase, FakeHTTPTestCaseMixin):
 
     @inlineCallbacks
     def test_config_knobs(self):
+        yield self.setup_application()
         self.knobbly_worker = yield self.get_application({
                 'transport_name': self.transport_name,
                 'worker_name': 'wikitest',
@@ -273,10 +298,13 @@ class WikipediaWorkerTestCase(ApplicationTestCase, FakeHTTPTestCaseMixin):
                 })
 
         yield self.assert_config_knob('api_url', urlparse(self.url),
-                                      urlparse('https://localhost:1337/'))
+             urlparse('https://localhost:1337/'))
         yield self.assert_config_knob('accept_gzip', False, True)
-        yield self.assert_config_knob('user_agent', 'vumi-wikipedia HTTP API',
-                                      'Bob Howard')
+        yield self.assert_config_knob(
+            'user_agent',
+            'vumi-wikipedia/1.0 (https://github.com/praekelt/vumi-wikipedia; '
+            'support@vumi.org)',
+            'Bob Howard')
         yield self.assert_config_knob('max_session_length', 600, 200)
         yield self.assert_config_knob('content_cache_time', 0, 3600)
         yield self.assert_config_knob('max_ussd_content_length', 160, 180)
@@ -286,6 +314,7 @@ class WikipediaWorkerTestCase(ApplicationTestCase, FakeHTTPTestCaseMixin):
 
     @inlineCallbacks
     def test_happy_flow_more(self):
+        yield self.setup_application()
         yield self.start_session()
         yield self.assert_response('cthulhu', CTHULHU_RESULTS)
         yield self.assert_response('1', CTHULHU_SECTIONS)
@@ -326,6 +355,7 @@ class WikipediaWorkerTestCase(ApplicationTestCase, FakeHTTPTestCaseMixin):
 
     @inlineCallbacks
     def test_more_then_new(self):
+        yield self.setup_application()
         yield self.start_session()
         yield self.assert_response('cthulhu', CTHULHU_RESULTS)
         yield self.assert_response('1', CTHULHU_SECTIONS)
@@ -355,14 +385,9 @@ class WikipediaWorkerTestCase(ApplicationTestCase, FakeHTTPTestCaseMixin):
 
     @inlineCallbacks
     def test_no_content_cache(self):
-        yield self.replace_application({
-                'transport_name': self.transport_name,
-                'worker_name': 'wikitest',
-                'sms_transport': 'sphex_sms',
-                'api_url': self.url,
-                'incoming_sms_transport': 'sphex_more',
-                'content_cache_time': 0,
-                })
+        yield self.setup_application({
+            'content_cache_time': 0,
+        })
 
         # Ensure an exception if `extract_redis` is used anywhere.
         self.worker.extract_redis = None
@@ -377,7 +402,29 @@ class WikipediaWorkerTestCase(ApplicationTestCase, FakeHTTPTestCaseMixin):
         self.assertEqual('+41791234567', sms_msg['to_addr'])
 
     @inlineCallbacks
+    def test_content_cache(self):
+        yield self.setup_application({
+            'content_cache_time': 10,
+        })
+
+        cache_keys = yield self.worker.extract_redis.keys('*')
+        self.assertEqual([], cache_keys)
+
+        yield self.start_session()
+        yield self.assert_response('cthulhu', CTHULHU_RESULTS)
+        yield self.assert_response('1', CTHULHU_SECTIONS)
+        yield self.assert_response('2', CTHULHU_USSD)
+
+        cache_keys = yield self.worker.extract_redis.keys('*')
+        self.assertEqual(['%s:Cthulhu' % (self.url,)], cache_keys)
+
+        [sms_msg] = self.get_outbound_msgs('sms_content')
+        self.assertEqual(CTHULHU_SMS, sms_msg['content'])
+        self.assertEqual('+41791234567', sms_msg['to_addr'])
+
+    @inlineCallbacks
     def test_session_events(self):
+        yield self.setup_application()
         close_session = lambda: self.dispatch(self.mkmsg_in(
                 None, session_event=TransportUserMessage.SESSION_CLOSE))
         start_session = lambda: self.assert_response(
@@ -420,6 +467,7 @@ class WikipediaWorkerTestCase(ApplicationTestCase, FakeHTTPTestCaseMixin):
 
     @inlineCallbacks
     def test_more_mid_session(self):
+        yield self.setup_application()
         yield self.start_session()
         yield self.assert_response('cthulhu', CTHULHU_RESULTS)
         yield self.assert_response('1', CTHULHU_SECTIONS)
@@ -447,3 +495,33 @@ class WikipediaWorkerTestCase(ApplicationTestCase, FakeHTTPTestCaseMixin):
                 'sms_more_content_reply': 2,
                 'sms_more_content_reply.1': 1,
                 })
+
+    @inlineCallbacks
+    def test_unicode_content(self):
+        yield self.setup_application({
+            'transliterate_unicode': False,
+        })
+
+        yield self.start_session()
+        yield self.assert_response('wikipedia', WIKIPEDIA_RESULTS)
+        yield self.assert_response('2', WIKIPEDIA_SECTIONS)
+        yield self.assert_response('1', WIKIPEDIA_USSD)
+
+        [sms_msg] = self.get_outbound_msgs('sms_content')
+        self.assertEqual(WIKIPEDIA_SMS, sms_msg['content'])
+        self.assertEqual('+41791234567', sms_msg['to_addr'])
+
+    @inlineCallbacks
+    def test_transliterate_unicode(self):
+        yield self.setup_application({
+            'transliterate_unicode': True,
+        })
+
+        yield self.start_session()
+        yield self.assert_response('wikipedia', WIKIPEDIA_RESULTS_TL)
+        yield self.assert_response('2', WIKIPEDIA_SECTIONS_TL)
+        yield self.assert_response('1', WIKIPEDIA_USSD_TL)
+
+        [sms_msg] = self.get_outbound_msgs('sms_content')
+        self.assertEqual(WIKIPEDIA_SMS_TL, sms_msg['content'])
+        self.assertEqual('+41791234567', sms_msg['to_addr'])
