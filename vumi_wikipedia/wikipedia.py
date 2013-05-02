@@ -38,7 +38,8 @@ class WikipediaConfig(ApplicationWorker.CONFIG_CLASS):
 
     user_agent = ConfigText(
         "Value of the `User-Agent` header on API requests.",
-        default='vumi-wikipedia/1.0 (https://github.com/praekelt/vumi-wikipedia; support@vumi.org)')
+        default=('vumi-wikipedia/1.0 (https://github.com/praekelt/vumi-'
+                 'wikipedia; support@vumi.org)'))
 
     max_session_length = ConfigInt(
         "Lifetime of query session in seconds. This includes the lifetime of"
@@ -98,7 +99,8 @@ class WikipediaConfig(ApplicationWorker.CONFIG_CLASS):
 
     msg_error = ConfigText(
         'Generic internal error message',
-        default=u'Sorry, there was an error processing your request. Please try again later.')
+        default=u'Sorry, there was an error processing your request.'
+        ' Please try again later.')
 
     msg_invalid_section = ConfigText(
         'User picked incorrect section',
@@ -223,7 +225,7 @@ class WikipediaWorker(ApplicationWorker):
         Turn a list of results into an enumerated multiple choice list
         """
         # Normalize all text for USSD (minimize, transliterate, etc)
-        options = [self.normalize_content(config, v)[0] for v in options] 
+        options = [self.normalize_content(config, v)[0] for v in options]
 
         joined = mkmenu(options, prefix, start)
         while len(joined) > config.max_ussd_content_length:
@@ -438,7 +440,8 @@ class WikipediaWorker(ApplicationWorker):
         ussd_text, sms_text = self.normalize_content(config, content)
         session['sms_content'] = sms_text
         session['sms_offset'] = 0
-        ussd_cont = self.get_ussd_formatter(config).format(ussd_text, config.msg_ussd_suffix)
+        ussd_cont = self.get_ussd_formatter(config).format(
+            ussd_text, config.msg_ussd_suffix)
         self.fire_metric('ussd_session_content')
         self.reply_to(msg, ussd_cont, False)
         self.log_action(

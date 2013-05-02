@@ -55,8 +55,10 @@ CTHULHU_END = (
 
 WIKIPEDIA_RESULTS = u'1. Wikipedia\n2. Wikip\xe9dia\n3. Main Page'
 WIKIPEDIA_SECTIONS = u'1. Wikip\xe9dia'
-WIKIPEDIA_USSD = u'Wikip\xe9dia may refer to:\nFrench ...\n(Full content sent by SMS.)'
-WIKIPEDIA_SMS = u'Wikip\xe9dia may refer to: French Wikipedia ... (reply for more)'
+WIKIPEDIA_USSD = (
+    u'Wikip\xe9dia may refer to:\nFrench ...\n(Full content sent by SMS.)')
+WIKIPEDIA_SMS = (
+    u'Wikip\xe9dia may refer to: French Wikipedia ... (reply for more)')
 
 WIKIPEDIA_RESULTS_TL = u'1. Wikipedia\n2. Wikipedia\n3. Main Page'
 WIKIPEDIA_SECTIONS_TL = u'1. Wikipedia'
@@ -298,8 +300,10 @@ class WikipediaWorkerTestCase(ApplicationTestCase, FakeHTTPTestCaseMixin):
         yield self.assert_config_knob('api_url', urlparse(self.url),
              urlparse('https://localhost:1337/'))
         yield self.assert_config_knob('accept_gzip', False, True)
-        yield self.assert_config_knob('user_agent',
-            'vumi-wikipedia/1.0 (https://github.com/praekelt/vumi-wikipedia; support@vumi.org)',
+        yield self.assert_config_knob(
+            'user_agent',
+            'vumi-wikipedia/1.0 (https://github.com/praekelt/vumi-wikipedia; '
+            'support@vumi.org)',
             'Bob Howard')
         yield self.assert_config_knob('max_session_length', 600, 200)
         yield self.assert_config_knob('content_cache_time', 0, 3600)
