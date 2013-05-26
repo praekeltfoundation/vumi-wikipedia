@@ -12,8 +12,9 @@ from vumi.blinkenlights.metrics import MetricManager, Count
 from vumi.config import (
     ConfigUrl, ConfigBool, ConfigText, ConfigInt, ConfigDict)
 
-from vumi_wikipedia.wikipedia_api import WikipediaAPI, ArticleExtract
-from vumi_wikipedia.text_manglers import (
+from .wikipedia_api import WikipediaAPI
+from .article_extract import ArticleExtract
+from .text_manglers import (
     ContentFormatter, normalize_whitespace, transliterate_unicode,
     minimize_unicode)
 
