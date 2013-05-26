@@ -3,3 +3,5 @@ https://github.com/dustin/twitty-twister/zipball/master#egg=twittytwister
 
 # We need a newer vumi than the "stable" release.
 -e git+https://github.com/praekelt/vumi.git@develop#egg=vumi-dev
+
+unidecode
