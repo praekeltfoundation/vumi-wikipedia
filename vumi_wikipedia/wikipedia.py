@@ -12,8 +12,7 @@ from vumi.blinkenlights.metrics import MetricManager, Count
 from vumi.config import (
     ConfigUrl, ConfigBool, ConfigText, ConfigInt, ConfigDict)
 
-from .wikipedia_api import WikipediaAPI
-from .article_extract import ArticleExtract
+from .wikipedia_api import WikipediaAPI, WikipediaArticle
 from .text_manglers import (
     ContentFormatter, normalize_whitespace, transliterate_unicode,
     minimize_unicode)
@@ -249,13 +248,18 @@ class WikipediaWorker(ApplicationWorker):
             yield self.extract_redis.set(key, extract.to_json())
             yield self.extract_redis.expire(key, config.content_cache_time)
         else:
-            extract = ArticleExtract.from_json(data)
+            extract = WikipediaArticle.from_json(data)
         returnValue(extract)
 
     def get_extract(self, config, title):
         if config.content_cache_time > 0:
             return self._get_cached_extract(config, title)
         return self.get_wikipedia_api(config).get_extract(title)
+
+    # def get_extract(self, config, title):
+    #     if config.content_cache_time > 0:
+    #         return self._get_cached_extract(config, title)
+    #     return self.get_wikipedia_api(config).get_parsoid(title)
 
     def _message_session_event(self, msg):
         # First, check for session parameters on the message.
