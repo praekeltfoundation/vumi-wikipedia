@@ -148,6 +148,8 @@ class WikipediaAPI(object):
     def _make_call(self, params):
         params.setdefault('format', 'json')
         url = '%s?%s' % (self.url, urlencode(params))
+        if isinstance(url, unicode):
+            url = url.encode('utf-8')
         headers = {'User-Agent': self.user_agent}
         if self.gzip:
             headers['Accept-Encoding'] = 'gzip'
