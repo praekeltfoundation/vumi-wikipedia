@@ -507,6 +507,9 @@ class WikipediaWorker(ApplicationWorker):
             self.log_action(msg, 'more-wrong-session-state')
             return
 
+        # Temporary log message for debugging weird session entries.
+        log.msg("Session 'more_messages' value: %r" % (
+            session.get('more_messages'),))
         more_messages = session.get('more_messages', 0) + 1
         session['more_messages'] = more_messages
         if more_messages > 9:
