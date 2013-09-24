@@ -1,6 +1,7 @@
 # -*- test-case-name: vumi_wikipedia.tests.test_wikipedia -*-
 
 import json
+import hashlib
 
 from twisted.internet.defer import inlineCallbacks, returnValue
 from vumi import log
@@ -120,6 +121,13 @@ class WikipediaConfig(ApplicationWorker.CONFIG_CLASS):
         'Message to add at the end of the truncated USSD result',
         default=u'\n(Full content sent by SMS.)')
 
+    hash_salt = ConfigText(
+        'Salt to use when hashing the user-ids before logging.', static=True)
+
+    hash_algorithm = ConfigText(
+        'hashlib algorithm to use for hashing the user-ids', static=True,
+        default='sha256')
+
 
 class WikipediaWorker(ApplicationWorker):
     """Look up Wikipedia content over USSD, deliver over USSD/SMS.
@@ -147,6 +155,9 @@ class WikipediaWorker(ApplicationWorker):
             self.consume_content_sms_message, 'sms_content')
         self.connectors[self.transport_name].set_event_handler(
             self.consume_content_sms_event, 'sms_content')
+
+        self.hash_algorithm = getattr(hashlib, config.hash_algorithm)
+        self.hash_salt = config.hash_salt
 
     def get_redis(self, config):
         return self._redis
@@ -294,11 +305,15 @@ class WikipediaWorker(ApplicationWorker):
             session = dict((k, json.dumps(v)) for k, v in session.items())
             return session_manager.save_session(user_id, session)
 
+    def hash_user(self, user_id):
+        return self.hash_algorithm(user_id + self.hash_salt).hexdigest()
+
     def log_action(self, msg, action, **kw):
         # the empty value should later be replaced with the network operator ID
         log_parts = [
-            'WIKI', msg.user(), msg['transport_name'], msg['transport_type'],
-            '', action, msg['content'],
+            'WIKI', self.hash_user(msg.user()), msg['transport_name'],
+            msg['transport_type'], msg.get('provider', ''),
+            action, msg['content'],
         ] + [u'%s=%r' % (k, v) for (k, v) in kw.items()]
 
         log.msg(u'\t'.join(unicode(s) for s in log_parts).encode('utf8'))
