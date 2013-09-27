@@ -533,10 +533,14 @@ class WikipediaWorker(ApplicationWorker):
             self.log_action(msg, 'more-wrong-session-state')
             return
 
-        # Temporary log message for debugging weird session entries.
-        log.msg("Session 'more_messages' value: %r" % (
-            session.get('more_messages'),))
-        more_messages = session.get('more_messages', 0) + 1
+        # FIXME: This is a stopgap until we can figure out why wy sometimes get
+        #        strings instead of integers here.
+        raw_more_messages = session.get('more_messages', 0)
+        if int(raw_more_messages) != raw_more_messages:
+            log.warning("Found non-integer 'more_messages': %r" % (
+                raw_more_messages,))
+            raw_more_messages = int(raw_more_messages)
+        more_messages = raw_more_messages + 1
         session['more_messages'] = more_messages
         if more_messages > 9:
             more_messages = 'extra'
