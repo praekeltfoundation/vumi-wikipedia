@@ -121,7 +121,7 @@ class WikipediaConfig(ApplicationWorker.CONFIG_CLASS):
         'Message to add at the end of the truncated USSD result',
         default=u'\n(Full content sent by SMS.)')
 
-    hash_salt = ConfigText(
+    secret_key = ConfigText(
         'Salt to use when hashing the user-ids before logging.', static=True)
 
     hash_algorithm = ConfigText(
@@ -157,7 +157,7 @@ class WikipediaWorker(ApplicationWorker):
             self.consume_content_sms_event, 'sms_content')
 
         self.hash_algorithm = getattr(hashlib, config.hash_algorithm)
-        self.hash_salt = config.hash_salt
+        self.secret_key = config.secret_key
 
     def get_redis(self, config):
         return self._redis
@@ -306,7 +306,7 @@ class WikipediaWorker(ApplicationWorker):
             return session_manager.save_session(user_id, session)
 
     def hash_user(self, user_id):
-        return self.hash_algorithm(user_id + self.hash_salt).hexdigest()
+        return self.hash_algorithm(user_id + self.secret_key).hexdigest()
 
     def log_action(self, msg, action, **kw):
         # the empty value should later be replaced with the network operator ID
