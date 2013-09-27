@@ -122,11 +122,17 @@ class WikipediaConfig(ApplicationWorker.CONFIG_CLASS):
         default=u'\n(Full content sent by SMS.)')
 
     secret_key = ConfigText(
-        'Salt to use when hashing the user-ids before logging.', static=True)
+        'Secret key to use when hashing the user-ids before logging.',
+        static=True)
 
     hash_algorithm = ConfigText(
         'hashlib algorithm to use for hashing the user-ids', static=True,
         default='sha256')
+
+    user_hash_char_limit = ConfigInt(
+        'Limit the user-hash to how many characters. '
+        'Defaults to -1 (leave as is)',
+        static=True, default=-1)
 
 
 class WikipediaWorker(ApplicationWorker):
@@ -306,7 +312,12 @@ class WikipediaWorker(ApplicationWorker):
             return session_manager.save_session(user_id, session)
 
     def hash_user(self, user_id):
-        return self.hash_algorithm(user_id + self.secret_key).hexdigest()
+        user_hash = self.hash_algorithm(user_id + self.secret_key).hexdigest()
+        config = self.get_static_config()
+        char_limit = config.user_hash_char_limit
+        if char_limit < 0:
+            return user_hash
+        return user_hash[:char_limit]
 
     def log_action(self, msg, action, **kw):
         # the empty value should later be replaced with the network operator ID

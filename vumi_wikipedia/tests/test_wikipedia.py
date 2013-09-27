@@ -1,12 +1,14 @@
 """Tests for vumi.demos.wikipedia."""
 
 import json
+import hashlib
 from urlparse import urlparse
 
 from twisted.internet.defer import inlineCallbacks
 
 from vumi.application.tests.test_base import ApplicationTestCase
 from vumi.message import TransportUserMessage
+from vumi.tests.utils import LogCatcher
 
 from vumi_wikipedia.wikipedia import WikipediaWorker
 from vumi_wikipedia.tests.test_wikipedia_api import (
@@ -88,6 +90,9 @@ class WikipediaWorkerTestCase(ApplicationTestCase, FakeHTTPTestCaseMixin):
             'worker_name': 'wikitest',
             'api_url': self.url,
             'metrics_prefix': 'test.metrics.wikipedia',
+            'hash_algorithm': 'sha256',
+            'secret_key': 'foo',
+            'user_hash_char_limit': 128,
         }
         defaults.update(config)
         if use_defaults:
@@ -525,3 +530,42 @@ class WikipediaWorkerTestCase(ApplicationTestCase, FakeHTTPTestCaseMixin):
         [sms_msg] = self.get_outbound_msgs('sms_content')
         self.assertEqual(WIKIPEDIA_SMS_TL, sms_msg['content'])
         self.assertEqual('+41791234567', sms_msg['to_addr'])
+
+    @inlineCallbacks
+    def test_logging_hash(self):
+        def mock_hash(_, user_id):
+            return 'foo'
+
+        self.patch(WikipediaWorker, 'hash_user', mock_hash)
+        app = yield self.setup_application()
+        with LogCatcher() as log:
+            yield self.start_session()
+            [entry] = log.logs
+            self.assertTrue(
+                'WIKI\tfoo\tsphex\tNone\t\tstart\tNone' in entry['message'])
+
+    @inlineCallbacks
+    def test_user_hash(self):
+        expected_user_hash = hashlib.sha256('+41791234567' + 'foo').hexdigest()
+        expected_entry = 'WIKI\t%s\tsphex\tNone\t\tstart\tNone' % (
+            expected_user_hash)
+        app = yield self.setup_application({
+            'user_hash_char_limit': -1
+            })
+        with LogCatcher() as log:
+            yield self.start_session()
+            [entry] = log.logs
+            self.assertTrue(expected_entry in entry['message'])
+
+    @inlineCallbacks
+    def test_hash_truncating(self):
+        expected_user_hash = hashlib.sha256('+41791234567' + 'foo').hexdigest()
+        expected_entry = 'WIKI\t%s\tsphex\tNone\t\tstart\tNone' % (
+            expected_user_hash[:64])
+        app = yield self.setup_application({
+            'user_hash_char_limit': 64
+            })
+        with LogCatcher() as log:
+            yield self.start_session()
+            [entry] = log.logs
+            self.assertTrue(expected_entry in entry['message'])
