@@ -6,7 +6,7 @@ from urlparse import urlparse
 
 from twisted.internet.defer import inlineCallbacks
 
-from vumi.application.tests.test_base import ApplicationTestCase
+from vumi.application.tests.utils import ApplicationTestCase
 from vumi.message import TransportUserMessage
 from vumi.tests.utils import LogCatcher
 
