@@ -327,7 +327,7 @@ class WikipediaWorker(ApplicationWorker):
             action, msg['content'],
         ] + [u'%s=%r' % (k, v) for (k, v) in kw.items()]
 
-        log.msg(u'\t'.join(unicode(s) for s in log_parts).encode('utf8'))
+        log.msg(u'\t'.join(unicode(s).replace('\n',' ').strip() for s in log_parts).encode('utf8'))
 
     @inlineCallbacks
     def consume_user_message(self, msg):
