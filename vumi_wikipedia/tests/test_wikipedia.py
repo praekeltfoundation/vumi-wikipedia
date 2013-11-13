@@ -561,7 +561,7 @@ class WikipediaWorkerTestCase(VumiTestCase, FakeHTTPTestCaseMixin):
     @inlineCallbacks
     def test_broken_session(self):
         yield self.setup_application()
-        msg = self.mkmsg_in(None)
+        msg = self.app_helper.make_inbound(None)
         cfg = yield self.worker.get_config(msg)
         session_manager = self.worker.get_session_manager(cfg)
         badsession = {'unexpectedfield': u'nostate'}
