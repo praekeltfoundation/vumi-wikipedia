@@ -324,7 +324,7 @@ class WikipediaWorker(ApplicationWorker):
         log_parts = [
             'WIKI', self.hash_user(msg.user()), msg['transport_name'],
             msg['transport_type'], msg.get('provider', ''),
-            action, msg['content'],
+            action, repr(msg['content']),
         ] + [u'%s=%r' % (k, v) for (k, v) in kw.items()]
 
         log.msg(u'\t'.join(unicode(s) for s in log_parts).encode('utf8'))
