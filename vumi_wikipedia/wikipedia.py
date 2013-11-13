@@ -347,6 +347,13 @@ class WikipediaWorker(ApplicationWorker):
             # session alive for the "more" handling.
             return
 
+        if session and ('state' not in session):
+            # We've seen at least one session that wasn't empty but didn't have
+            # the 'state' field. Let's log this and treat it as an empty
+            # session instead.
+            log.warning("Bad session, resetting: %s" % (session,))
+            session = {}
+
         if (not session) or (session['state'] == 'more'):
             # If we have no session data, treat this as 'new' even if it isn't.
             # Also, new USSD search overrides old "more content" session.

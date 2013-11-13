@@ -2,6 +2,7 @@
 
 import json
 import hashlib
+import logging
 from urlparse import urlparse
 
 from twisted.internet.defer import inlineCallbacks
@@ -569,3 +570,17 @@ class WikipediaWorkerTestCase(ApplicationTestCase, FakeHTTPTestCaseMixin):
             yield self.start_session()
             [entry] = log.logs
             self.assertTrue(expected_entry in entry['message'])
+
+    @inlineCallbacks
+    def test_broken_session(self):
+        yield self.setup_application()
+        msg = self.mkmsg_in(None)
+        cfg = yield self.worker.get_config(msg)
+        session_manager = self.worker.get_session_manager(cfg)
+        badsession = {'unexpectedfield': u'nostate'}
+        yield self.worker.save_session(session_manager, msg.user(), badsession)
+        with LogCatcher(log_level=logging.WARNING) as log:
+            yield self.start_session()
+            [warning] = log.logs
+            expected_warning = 'Bad session, resetting: %s' % (badsession,)
+            self.assertTrue(expected_warning in warning['message'])
