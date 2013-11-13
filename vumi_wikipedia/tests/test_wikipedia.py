@@ -586,7 +586,7 @@ class WikipediaWorkerTestCase(VumiTestCase, FakeHTTPTestCaseMixin):
                 entry for entry in log.logs
                 if 'HTTP11Client' not in entry['message'][0]]
             self.assertEqual(
-                'WIKI\tfoo\tsphex\tNone\t\tstart\tNone', entry1['message'][0])
+                'WIKI\tfoo\tsphex\tussd\t\tstart\tNone', entry1['message'][0])
             self.assertEqual(
-                ("WIKI\tfoo\tsphex\tNone\t\ttitles\tu'\\tcthulhu\\n'\tfound=9"
+                ("WIKI\tfoo\tsphex\tussd\t\ttitles\tu'\\tcthulhu\\n'\tfound=9"
                  "\tshown=6"), entry2['message'][0])
