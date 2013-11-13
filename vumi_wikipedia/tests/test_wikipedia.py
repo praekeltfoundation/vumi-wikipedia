@@ -584,3 +584,22 @@ class WikipediaWorkerTestCase(ApplicationTestCase, FakeHTTPTestCaseMixin):
             [warning] = log.logs
             expected_warning = 'Bad session, resetting: %s' % (badsession,)
             self.assertTrue(expected_warning in warning['message'])
+
+    @inlineCallbacks
+    def test_logging_message_content(self):
+        def mock_hash(_, user_id):
+            return 'foo'
+
+        self.patch(WikipediaWorker, 'hash_user', mock_hash)
+        yield self.setup_application()
+        with LogCatcher() as log:
+            yield self.start_session()
+            yield self.assert_response('\tcthulhu\n', CTHULHU_RESULTS)
+            [entry1, entry2] = [
+                entry for entry in log.logs
+                if 'HTTP11Client' not in entry['message'][0]]
+            self.assertEqual(
+                'WIKI\tfoo\tsphex\tNone\t\tstart\tNone', entry1['message'][0])
+            self.assertEqual(
+                ("WIKI\tfoo\tsphex\tNone\t\ttitles\tu'\\tcthulhu\\n'\tfound=9"
+                 "\tshown=6"), entry2['message'][0])
