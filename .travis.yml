@@ -12,6 +12,6 @@ install:
   - "pip install -r requirements.pip --use-mirrors"
   - "pip install overalls"
 script:
-  - VUMITEST_REDIS_DB=1 coverage run --source=vumi_wikipedia `which trial` vumi
+  - VUMITEST_REDIS_DB=1 coverage run --source=vumi_wikipedia `which trial` vumi_wikipedia
 after_success:
   - coveralls
