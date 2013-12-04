@@ -1,5 +1,6 @@
 # -*- test-case-name: vumi_wikipedia.tests.test_wikipedia -*-
 
+import time
 import json
 import hashlib
 
@@ -9,7 +10,7 @@ from vumi.application import ApplicationWorker
 from vumi.persist.txredis_manager import TxRedisManager
 from vumi.components.session import SessionManager
 from vumi.message import TransportUserMessage
-from vumi.blinkenlights.metrics import MetricManager, Count
+from vumi.blinkenlights.metrics import MetricManager, Count, Timer
 from vumi.config import (
     ConfigUrl, ConfigBool, ConfigText, ConfigInt, ConfigDict)
 
@@ -218,14 +219,20 @@ class WikipediaWorker(ApplicationWorker):
                         ]])
         for metric in metrics:
             self.metrics.register(Count(metric))
+        self.metrics.register(Timer('wikipedia_search_call'))
+        self.metrics.register(Timer('wikipedia_extract_call'))
 
-    def fire_metric(self, metric_name, metric_suffix=None, value=1):
+    def fire_metric(self, config, metric_name, metric_suffix=None, value=1):
         if self.metrics is None or metric_name is None:
             return
         if metric_suffix is not None:
             metric_name = '%s.%s' % (metric_name, metric_suffix)
         self.metrics[metric_name].set(value)
-        pass
+
+    def get_timer_metric(self, config, metric_name):
+        if self.metrics is None or metric_name is None:
+            return TimerWrapper(None)
+        return TimerWrapper(self.metrics[metric_name])
 
     def consume_content_sms_event(self, event):
         # TODO: We probably shouldn't just ignore these.
@@ -259,7 +266,8 @@ class WikipediaWorker(ApplicationWorker):
         key = ':'.join([wikipedia.url, title])
         data = yield self.extract_redis.get(key)
         if data is None:
-            extract = yield self.get_wikipedia_api(config).get_extract(title)
+            with self.get_timer_metric(config, 'wikipedia_extract_call'):
+                extract = yield wikipedia.get_extract(title)
             # We do this in two steps because our redis clients disagree on
             # what SETEX should look like.
             yield self.extract_redis.set(key, extract.to_json())
@@ -271,7 +279,8 @@ class WikipediaWorker(ApplicationWorker):
     def get_extract(self, config, title):
         if config.content_cache_time > 0:
             return self._get_cached_extract(config, title)
-        return self.get_wikipedia_api(config).get_extract(title)
+        with self.get_timer_metric(config, 'wikipedia_extract_call'):
+            return self.get_wikipedia_api(config).get_extract(title)
 
     def _message_session_event(self, msg):
         # First, check for session parameters on the message.
@@ -371,7 +380,7 @@ class WikipediaWorker(ApplicationWorker):
             # Uncomment to raise instead of logging (useful for tests)
             # raise
             log.err()
-            self.fire_metric('ussd_session_error')
+            self.fire_metric(config, 'ussd_session_error')
             self.reply_to(msg, config.msg_error, False)
             yield session_manager.clear_session(user_id)
 
@@ -379,7 +388,7 @@ class WikipediaWorker(ApplicationWorker):
         """ Input:  User dialed USSD magic number.
             Output: Search string prompt."""
         self.log_action(msg, 'start')
-        self.fire_metric('ussd_session_start')
+        self.fire_metric(config, 'ussd_session_start')
         self.reply_to(msg, config.msg_prompt, True)
         session['state'] = 'searching'
         return session
@@ -388,10 +397,11 @@ class WikipediaWorker(ApplicationWorker):
     def process_message_searching(self, msg, config, session):
         """ Input:  User gives a search query.
             Output: List of search results (titles)."""
-        self.fire_metric('ussd_session_search')
+        self.fire_metric(config, 'ussd_session_search')
         query = msg['content'].strip()
 
-        results = yield self.get_wikipedia_api(config).search(query)
+        with self.get_timer_metric(config, 'wikipedia_search_call'):
+            results = yield self.get_wikipedia_api(config).search(query)
         if results:
             count, msgcontent = self.make_options(config, results)
             session['results'] = json.dumps(results[:count])
@@ -399,7 +409,7 @@ class WikipediaWorker(ApplicationWorker):
             session['state'] = 'sections'
         else:
             count = 0
-            self.fire_metric('ussd_session_search.no_results')
+            self.fire_metric(config, 'ussd_session_search.no_results')
             self.reply_to(msg, config.msg_no_results % query, False)
             session['state'] = None
         self.log_action(msg, 'titles', found=len(results), shown=count)
@@ -412,11 +422,11 @@ class WikipediaWorker(ApplicationWorker):
             try:
                 index = int(response) - 1
                 result = options[index]
-                self.fire_metric(metric_prefix, index + 1)
+                self.fire_metric(config, metric_prefix, index + 1)
                 return (result, index)
             except (KeyError, IndexError):
                 pass
-        self.fire_metric(metric_prefix, 'invalid')
+        self.fire_metric(config, metric_prefix, 'invalid')
         self.reply_to(msg, config.msg_invalid_section, False)
         return (None, None)
 
@@ -424,7 +434,7 @@ class WikipediaWorker(ApplicationWorker):
     def process_message_sections(self, msg, config, session):
         """ Input:  User selects the search result.
             Output: List of article section titles"""
-        self.fire_metric('ussd_session_results')
+        self.fire_metric(config, 'ussd_session_results')
         selection, index = self.select_option(
             config,
             json.loads(session['results']), msg,
@@ -459,7 +469,7 @@ class WikipediaWorker(ApplicationWorker):
     def process_message_content(self, msg, config, session):
         """ Input:  User selects the article section.
             Output: Section content -> USSD + SMS"""
-        self.fire_metric('ussd_session_sections')
+        self.fire_metric(config, 'ussd_session_sections')
         sections = json.loads(session['results'])
         selection, index = self.select_option(
             config, sections, msg, metric_prefix='ussd_session_sections')
@@ -475,7 +485,7 @@ class WikipediaWorker(ApplicationWorker):
         session['sms_offset'] = 0
         ussd_cont = self.get_ussd_formatter(config).format(
             ussd_text, config.msg_ussd_suffix)
-        self.fire_metric('ussd_session_content')
+        self.fire_metric(config, 'ussd_session_content')
         self.reply_to(msg, ussd_cont, False)
         self.log_action(
             msg, 'ussdcontent', section=selection,
@@ -529,11 +539,11 @@ class WikipediaWorker(ApplicationWorker):
         session_manager = self.get_session_manager(config)
 
         session = yield self.load_session(session_manager, user_id)
-        self.fire_metric('sms_more_content_reply')
+        self.fire_metric(config, 'sms_more_content_reply')
         if not session:
             self.log_action(msg, 'more-no-session')
             # TODO: Reply with error?
-            self.fire_metric('sms_more_content_reply.no_content')
+            self.fire_metric(config, 'sms_more_content_reply.no_content')
             return
 
         if session['state'] != 'more':
@@ -551,7 +561,7 @@ class WikipediaWorker(ApplicationWorker):
         session['more_messages'] = more_messages
         if more_messages > 9:
             more_messages = 'extra'
-        self.fire_metric('sms_more_content_reply', more_messages)
+        self.fire_metric(config, 'sms_more_content_reply', more_messages)
 
         try:
             session = yield self.send_sms_content(msg, config, session)
@@ -560,3 +570,26 @@ class WikipediaWorker(ApplicationWorker):
             log.err()
             # TODO: Reply with error?
             yield session_manager.clear_session(user_id)
+
+
+class TimerWrapper(object):
+    """An object that wraps a timer metric and provides a context manager.
+
+    TODO: Fix timer metrics in vumi to make them reentrant and avoid some of
+    the reimplementation in here.
+    """
+
+    def __init__(self, metric):
+        self._metric = metric
+        self._start_time = None
+
+    def __enter__(self):
+        self._start_time = time.time()
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        duration = time.time() - self._start_time
+        self._start_time = None
+        if self._metric is not None:
+            self._metric.set(duration)
+        return False
