@@ -125,6 +125,15 @@ class WikipediaWorkerTestCase(VumiTestCase, FakeHTTPTestCaseMixin):
             val = sum(v for ts, v in points)
             if val > 0:
                 metrics[name[prefix_len:]] = val
+        for k, v in expected_metrics.items():
+            if isinstance(v, tuple):
+                low, high = v
+                actual = metrics[k]
+                self.assertTrue(
+                    low <= actual <= high,
+                    'Expected %s between %s and %s, was %s.' % (
+                        k, low, high, actual))
+                expected_metrics[k] = actual
         self.assertEqual(expected_metrics, metrics)
 
     def start_session(self):
@@ -171,6 +180,8 @@ class WikipediaWorkerTestCase(VumiTestCase, FakeHTTPTestCaseMixin):
                 'ussd_session_sections': 1,
                 'ussd_session_sections.2': 1,
                 'ussd_session_content': 1,
+                'wikipedia_search_call': (0, 1),
+                'wikipedia_extract_call': (0, 1),
                 })
 
     @inlineCallbacks
@@ -203,6 +214,8 @@ class WikipediaWorkerTestCase(VumiTestCase, FakeHTTPTestCaseMixin):
                 'ussd_session_sections': 1,
                 'ussd_session_sections.2': 1,
                 'ussd_session_content': 1,
+                'wikipedia_search_call': (0, 1),
+                'wikipedia_extract_call': (0, 1),
                 })
 
     @inlineCallbacks
@@ -217,6 +230,7 @@ class WikipediaWorkerTestCase(VumiTestCase, FakeHTTPTestCaseMixin):
                 'ussd_session_search': 1,
                 'ussd_session_results': 1,
                 'ussd_session_results.invalid': 1,
+                'wikipedia_search_call': (0, 1),
                 })
 
     @inlineCallbacks
@@ -231,6 +245,7 @@ class WikipediaWorkerTestCase(VumiTestCase, FakeHTTPTestCaseMixin):
                 'ussd_session_search': 1,
                 'ussd_session_results': 1,
                 'ussd_session_results.invalid': 1,
+                'wikipedia_search_call': (0, 1),
                 })
 
     @inlineCallbacks
@@ -248,6 +263,8 @@ class WikipediaWorkerTestCase(VumiTestCase, FakeHTTPTestCaseMixin):
                 'ussd_session_results.1': 1,
                 'ussd_session_sections': 1,
                 'ussd_session_sections.invalid': 1,
+                'wikipedia_search_call': (0, 1),
+                'wikipedia_extract_call': (0, 1),
                 })
 
     @inlineCallbacks
@@ -261,6 +278,7 @@ class WikipediaWorkerTestCase(VumiTestCase, FakeHTTPTestCaseMixin):
                 'ussd_session_start': 1,
                 'ussd_session_search': 1,
                 'ussd_session_search.no_results': 1,
+                'wikipedia_search_call': (0, 1),
                 })
 
     @inlineCallbacks
@@ -275,6 +293,7 @@ class WikipediaWorkerTestCase(VumiTestCase, FakeHTTPTestCaseMixin):
                 'ussd_session_start': 1,
                 'ussd_session_search': 1,
                 'ussd_session_error': 1,
+                'wikipedia_search_call': (0, 1),
                 })
 
     @inlineCallbacks
@@ -347,6 +366,8 @@ class WikipediaWorkerTestCase(VumiTestCase, FakeHTTPTestCaseMixin):
                 'sms_more_content_reply.6': 1,
                 'sms_more_content_reply.7': 1,
                 'sms_more_content_reply.8': 1,
+                'wikipedia_search_call': (0, 1),
+                'wikipedia_extract_call': (0, 1),
                 })
 
     @inlineCallbacks
@@ -377,6 +398,8 @@ class WikipediaWorkerTestCase(VumiTestCase, FakeHTTPTestCaseMixin):
                 'ussd_session_content': 1,
                 'sms_more_content_reply': 1,
                 'sms_more_content_reply.1': 1,
+                'wikipedia_search_call': (0, 1),
+                'wikipedia_extract_call': (0, 1),
                 })
 
     @inlineCallbacks
@@ -460,6 +483,8 @@ class WikipediaWorkerTestCase(VumiTestCase, FakeHTTPTestCaseMixin):
                 'ussd_session_sections': 1,
                 'ussd_session_sections.2': 1,
                 'ussd_session_content': 1,
+                'wikipedia_search_call': (0, 1),
+                'wikipedia_extract_call': (0, 1),
                 })
 
     @inlineCallbacks
@@ -491,6 +516,8 @@ class WikipediaWorkerTestCase(VumiTestCase, FakeHTTPTestCaseMixin):
                 'ussd_session_content': 1,
                 'sms_more_content_reply': 2,
                 'sms_more_content_reply.1': 1,
+                'wikipedia_search_call': (0, 1),
+                'wikipedia_extract_call': (0, 1),
                 })
 
     @inlineCallbacks

@@ -1,5 +1,6 @@
 # -*- test-case-name: vumi_wikipedia.tests.test_wikipedia -*-
 
+import time
 import json
 import hashlib
 
@@ -9,7 +10,7 @@ from vumi.application import ApplicationWorker
 from vumi.persist.txredis_manager import TxRedisManager
 from vumi.components.session import SessionManager
 from vumi.message import TransportUserMessage
-from vumi.blinkenlights.metrics import MetricManager, Count
+from vumi.blinkenlights.metrics import MetricManager, Count, Timer
 from vumi.config import (
     ConfigUrl, ConfigBool, ConfigText, ConfigInt, ConfigDict)
 
@@ -218,6 +219,8 @@ class WikipediaWorker(ApplicationWorker):
                         ]])
         for metric in metrics:
             self.metrics.register(Count(metric))
+        self.metrics.register(Timer('wikipedia_search_call'))
+        self.metrics.register(Timer('wikipedia_extract_call'))
 
     def fire_metric(self, metric_name, metric_suffix=None, value=1):
         if self.metrics is None or metric_name is None:
@@ -225,7 +228,11 @@ class WikipediaWorker(ApplicationWorker):
         if metric_suffix is not None:
             metric_name = '%s.%s' % (metric_name, metric_suffix)
         self.metrics[metric_name].set(value)
-        pass
+
+    def get_timer_metric(self, metric_name):
+        if self.metrics is None or metric_name is None:
+            return TimerWrapper(None)
+        return TimerWrapper(self.metrics[metric_name])
 
     def consume_content_sms_event(self, event):
         # TODO: We probably shouldn't just ignore these.
@@ -259,7 +266,8 @@ class WikipediaWorker(ApplicationWorker):
         key = ':'.join([wikipedia.url, title])
         data = yield self.extract_redis.get(key)
         if data is None:
-            extract = yield self.get_wikipedia_api(config).get_extract(title)
+            with self.get_timer_metric('wikipedia_extract_call'):
+                extract = yield wikipedia.get_extract(title)
             # We do this in two steps because our redis clients disagree on
             # what SETEX should look like.
             yield self.extract_redis.set(key, extract.to_json())
@@ -271,7 +279,8 @@ class WikipediaWorker(ApplicationWorker):
     def get_extract(self, config, title):
         if config.content_cache_time > 0:
             return self._get_cached_extract(config, title)
-        return self.get_wikipedia_api(config).get_extract(title)
+        with self.get_timer_metric('wikipedia_extract_call'):
+            return self.get_wikipedia_api(config).get_extract(title)
 
     def _message_session_event(self, msg):
         # First, check for session parameters on the message.
@@ -391,7 +400,8 @@ class WikipediaWorker(ApplicationWorker):
         self.fire_metric('ussd_session_search')
         query = msg['content'].strip()
 
-        results = yield self.get_wikipedia_api(config).search(query)
+        with self.get_timer_metric('wikipedia_search_call'):
+            results = yield self.get_wikipedia_api(config).search(query)
         if results:
             count, msgcontent = self.make_options(config, results)
             session['results'] = json.dumps(results[:count])
@@ -560,3 +570,26 @@ class WikipediaWorker(ApplicationWorker):
             log.err()
             # TODO: Reply with error?
             yield session_manager.clear_session(user_id)
+
+
+class TimerWrapper(object):
+    """An object that wraps a timer metric and provides a context manager.
+
+    TODO: Fix timer metrics in vumi to make them reentrant and avoid some of
+    the reimplementation in here.
+    """
+
+    def __init__(self, metric):
+        self._metric = metric
+        self._start_time = None
+
+    def __enter__(self):
+        self._start_time = time.time()
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        duration = time.time() - self._start_time
+        self._start_time = None
+        if self._metric is not None:
+            self._metric.set(duration)
+        return False
