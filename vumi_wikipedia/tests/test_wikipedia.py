@@ -190,8 +190,12 @@ class WikipediaWorkerTestCase(VumiTestCase, FakeHTTPTestCaseMixin):
             'worker_name': 'wikitest',
             'api_url': self.url,
         }, use_defaults=False)
-        self.worker.fire_metric('foo')
         # Make sure it's safe to fire a metric when we aren't collecting them.
+        self.worker.fire_metric(None, 'foo')
+        self.assertEqual(self.worker.metrics, None)
+        # Make sure it's safe to use a timer metric when we aren't collecting.
+        with self.worker.get_timer_metric(None, 'foo'):
+            pass
         self.assertEqual(self.worker.metrics, None)
 
     @inlineCallbacks
