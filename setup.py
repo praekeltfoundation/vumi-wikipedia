@@ -7,7 +7,10 @@ setup(
     packages=find_packages(),
     include_package_data=True,
     install_requires=[
-        'vumi > 0.3.1',
+        # NOTE: We currently depend on a developer version of vumi that must be
+        # installed before us.
+        'vumi>0.4',
+        'unidecode',
     ],
 
     url='http://github.com/praekelt/vumi-wikipedia',

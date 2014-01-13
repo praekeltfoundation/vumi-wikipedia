@@ -1,7 +1,11 @@
-# This seems to be broken in vumi.
-https://github.com/dustin/twitty-twister/zipball/master#egg=twittytwister
+# Our dependencies are all specified in setup.py.
 
-# We need a newer vumi than the "stable" release.
--e git+https://github.com/praekelt/vumi.git@develop#egg=vumi-dev
+# vumi needs to be installed from the its repository because we depend on the
+# dev version. To upgrade, use the following command:
+#   pip install --exists-action i -U -r requirements.pip
+# This will ignore any existing repository clone. It can be updated manually if
+# desired.
 
-unidecode
+-e git+https://github.com/praekelt/vumi.git#egg=vumi
+
+-e .
