@@ -14,7 +14,7 @@ from vumi.blinkenlights.metrics import MetricManager, Count, Timer
 from vumi.config import (
     ConfigUrl, ConfigBool, ConfigText, ConfigInt, ConfigDict)
 
-from vumi_wikipedia.wikipedia_api import WikipediaAPI, ArticleExtract
+from vumi_wikipedia.wikipedia_api import WikipediaAPI, ArticleExtract, APIError
 from vumi_wikipedia.text_manglers import (
     ContentFormatter, normalize_whitespace, transliterate_unicode,
     minimize_unicode)
@@ -376,10 +376,13 @@ class WikipediaWorker(ApplicationWorker):
         try:
             session = yield pfunc(msg, config, session)
             yield self.handle_session_result(session_manager, user_id, session)
-        except:
+        except Exception as err:
             # Uncomment to raise instead of logging (useful for tests)
             # raise
-            log.err()
+            if isinstance(err, APIError):
+                log.warning("API Error: %s" % (err,))
+            else:
+                log.err()
             self.fire_metric(config, 'ussd_session_error')
             self.reply_to(msg, config.msg_error, False)
             yield session_manager.clear_session(user_id)
