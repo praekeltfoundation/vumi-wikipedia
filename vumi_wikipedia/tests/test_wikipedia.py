@@ -288,10 +288,12 @@ class WikipediaWorkerTestCase(VumiTestCase, FakeHTTPTestCaseMixin):
     def test_search_error(self):
         yield self.setup_application()
         yield self.start_session()
-        yield self.assert_response(
-            '.', ('Sorry, there was an error processing your request. Please '
-                  'try ' 'again later.'))
-        self.flushLoggedErrors()
+        with LogCatcher(log_level=logging.WARNING) as log:
+            yield self.assert_response(
+                '.', ('Sorry, there was an error processing your request. '
+                      'Please try ' 'again later.'))
+            [warning] = log.logs
+            self.assertTrue('srsearch-text-disabled' in warning['message'][0])
         yield self.assert_metrics({
                 'ussd_session_start': 1,
                 'ussd_session_search': 1,
