@@ -78,9 +78,8 @@ class WikipediaWorkerTestCase(VumiTestCase, FakeHTTPTestCaseMixin):
 
     @inlineCallbacks
     def setUp(self):
-        self.app_helper = ApplicationHelper(
-            WikipediaWorker, transport_type='ussd')
-        self.add_cleanup(self.app_helper.cleanup)
+        self.app_helper = self.add_helper(ApplicationHelper(
+            WikipediaWorker, transport_type='ussd'))
         yield self.start_webserver(WIKIPEDIA_RESPONSES)
 
     @inlineCallbacks
