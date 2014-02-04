@@ -289,9 +289,9 @@ class WikipediaWorkerTestCase(VumiTestCase, FakeHTTPTestCaseMixin):
         yield self.setup_application()
         yield self.start_session()
         with LogCatcher(log_level=logging.WARNING) as log:
-            yield self.assert_response(
-                '.', ('Sorry, there was an error processing your request. '
-                      'Please try ' 'again later.'))
+            yield self.assert_response('.', (
+                'Sorry, there was an error processing your request. Please '
+                'try again later.'))
             [warning] = log.logs
             self.assertTrue('srsearch-text-disabled' in warning['message'][0])
         yield self.assert_metrics({
@@ -305,19 +305,20 @@ class WikipediaWorkerTestCase(VumiTestCase, FakeHTTPTestCaseMixin):
     def test_config_knobs(self):
         yield self.setup_application()
         self.knobbly_worker = yield self.app_helper.get_application({
-                'worker_name': 'wikitest',
-                'sms_transport': 'sphex_sms',
+            'worker_name': 'wikitest',
+            'sms_transport': 'sphex_sms',
 
-                'api_url': 'https://localhost:1337/',
-                'accept_gzip': True,
-                'user_agent': 'Bob Howard',
-                'max_session_length': 200,
-                'content_cache_time': 3600,
-                'max_ussd_content_length': 180,
-                'max_ussd_unicode_length': 80,
-                'max_sms_content_length': 300,
-                'max_sms_unicode_length': 130,
-                })
+            'api_url': 'https://localhost:1337/',
+            'api_timeout': 10,
+            'accept_gzip': True,
+            'user_agent': 'Bob Howard',
+            'max_session_length': 200,
+            'content_cache_time': 3600,
+            'max_ussd_content_length': 180,
+            'max_ussd_unicode_length': 80,
+            'max_sms_content_length': 300,
+            'max_sms_unicode_length': 130,
+        })
 
         yield self.assert_config_knob('api_url', urlparse(self.url),
              urlparse('https://localhost:1337/'))
@@ -333,6 +334,7 @@ class WikipediaWorkerTestCase(VumiTestCase, FakeHTTPTestCaseMixin):
         yield self.assert_config_knob('max_ussd_unicode_length', 70, 80)
         yield self.assert_config_knob('max_sms_content_length', 160, 300)
         yield self.assert_config_knob('max_sms_unicode_length', 70, 130)
+        yield self.assert_config_knob('api_timeout', 5, 10)
 
     @inlineCallbacks
     def test_happy_flow_more(self):
@@ -622,3 +624,14 @@ class WikipediaWorkerTestCase(VumiTestCase, FakeHTTPTestCaseMixin):
             self.assertEqual(
                 ("WIKI\tfoo\tsphex\tussd\t\ttitles\tu'\\tcthulhu\\n'\tfound=9"
                  "\tshown=6"), entry2['message'][0])
+
+    @inlineCallbacks
+    def test_wikipedia_api_params(self):
+        yield self.setup_application()
+        msg = self.app_helper.make_inbound(None)
+        worker_config = yield self.worker.get_config(msg)
+        api = self.worker.get_wikipedia_api(worker_config)
+        self.assertEqual(api.url, worker_config.api_url.geturl())
+        self.assertEqual(api.gzip, worker_config.accept_gzip)
+        self.assertEqual(api.user_agent, worker_config.user_agent)
+        self.assertEqual(api.api_timeout, worker_config.api_timeout)

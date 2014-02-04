@@ -33,6 +33,8 @@ class WikipediaConfig(ApplicationWorker.CONFIG_CLASS):
         " articles that may not hold outside of Wikipedia.",
         default='http://en.wikipedia.org/w/api.php')
 
+    api_timeout = ConfigInt("API call timeout in seconds.", default=5)
+
     accept_gzip = ConfigBool(
         "If `True`, the HTTP client will request gzipped responses. This is"
         " generally beneficial, although it requires Twisted 11.1 or later.",
@@ -176,7 +178,8 @@ class WikipediaWorker(ApplicationWorker):
 
     def get_wikipedia_api(self, config):
         return WikipediaAPI(
-            config.api_url.geturl(), config.accept_gzip, config.user_agent)
+            config.api_url.geturl(), config.accept_gzip, config.user_agent,
+            api_timeout=config.api_timeout)
 
     def get_sms_formatter(self, config):
         return ContentFormatter(
