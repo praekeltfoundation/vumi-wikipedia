@@ -289,9 +289,9 @@ class WikipediaWorkerTestCase(VumiTestCase, FakeHTTPTestCaseMixin):
         yield self.setup_application()
         yield self.start_session()
         with LogCatcher(log_level=logging.WARNING) as log:
-            yield self.assert_response(
-                '.', ('Sorry, there was an error processing your request. '
-                      'Please try ' 'again later.'))
+            yield self.assert_response('.', (
+                'Sorry, there was an error processing your request. Please '
+                'try again later.'))
             [warning] = log.logs
             self.assertTrue('srsearch-text-disabled' in warning['message'][0])
         yield self.assert_metrics({
