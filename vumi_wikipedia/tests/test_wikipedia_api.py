@@ -6,6 +6,7 @@ from twisted.internet import reactor
 from twisted.internet.defer import inlineCallbacks
 from twisted.internet.protocol import Protocol, Factory
 from twisted.trial.unittest import TestCase
+from vumi.utils import HttpTimeoutError
 
 from vumi_wikipedia.wikipedia_api import WikipediaAPI, ArticleExtract, APIError
 
@@ -213,3 +214,8 @@ class WikipediaAPITestCase(TestCase, FakeHTTPTestCaseMixin):
         self.wikipedia = WikipediaAPI(self.url, False, 'Bob Howard')
         self.expected_user_agent = 'Bob Howard'
         yield self.wikipedia.get_extract('Cthulhu')
+
+    def test_api_timeout(self):
+        self.wikipedia = WikipediaAPI(self.url, False, api_timeout=0)
+        return self.assertFailure(
+            self.wikipedia.get_extract('Cthulhu'), HttpTimeoutError)
