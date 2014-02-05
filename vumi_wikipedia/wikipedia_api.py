@@ -139,10 +139,11 @@ class WikipediaAPI(object):
 
     PRINT_DEBUG = False
 
-    def __init__(self, url=None, gzip=None, user_agent=None):
+    def __init__(self, url=None, gzip=None, user_agent=None, api_timeout=None):
         self.url = either(url, self.URL)
         self.gzip = either(gzip, self.GZIP)
         self.user_agent = either(user_agent, self.USER_AGENT)
+        self.api_timeout = api_timeout
 
     @inlineCallbacks
     def _make_call(self, params):
@@ -155,7 +156,8 @@ class WikipediaAPI(object):
             headers['Accept-Encoding'] = 'gzip'
         if self.PRINT_DEBUG:
             print "\n=====\n\n%s /?%s\n" % ('GET', url.split('?', 1)[1])
-        response = yield http_request_full(url, '', headers, method='GET')
+        response = yield http_request_full(
+            url, '', headers, method='GET', timeout=self.api_timeout)
         if self.PRINT_DEBUG:
             print response.delivered_body
             print "\n====="
