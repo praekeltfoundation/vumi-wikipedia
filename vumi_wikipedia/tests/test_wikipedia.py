@@ -46,6 +46,7 @@ CTHULHU_SMS_NO_MORE = (
 CTHULHU_SMS = (
     u'The first half of the principal manuscript told a very peculiar tale. '
     u'It appears that on 1 March 1925, a thin, dark young man of neurotic ... '
+    u'http://en.wikipedia.org/wiki/Cthulhu '
     u'(reply for more)')
 
 CTHULHU_MORE = (
