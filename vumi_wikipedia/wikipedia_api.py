@@ -33,11 +33,13 @@ class ArticleExtract(object):
     Class representing an article extract
     """
 
-    def __init__(self, data):
-        if isinstance(data, list):
-            self.sections = data
+    def __init__(self, data, fullurl):
+        if isinstance(data, dict):
+            self.sections = [ArticleSection.from_dict(section)
+                             for section in data['sections']]
         else:
             self._from_string(data)
+        self.fullurl = fullurl
 
     def _from_string(self, data):
         split_data = ARTICLE_SPLITTER.split(data)
@@ -68,12 +70,15 @@ class ArticleExtract(object):
                 self.sections[-1].add_subsection(section)
 
     def to_json(self):
-        return json.dumps([s.to_dict() for s in self.sections])
+        return json.dumps({
+            'fullurl': self.fullurl,
+            'sections': [s.to_dict() for s in self.sections]
+        })
 
     @classmethod
     def from_json(cls, data):
-        return cls([ArticleSection.from_dict(section)
-                    for section in json.loads(data)])
+        obj = json.loads(data)
+        return cls(obj, obj['fullurl'])
 
 
 class ArticleSection(object):
@@ -202,13 +207,14 @@ class WikipediaAPI(object):
         """
         response = yield self._make_call({
                 'action': 'query',
-                'prop': 'extracts',
+                'prop': 'extracts|info',
+                'inprop': 'url',
                 'explaintext': '',
                 'exsectionformat': 'raw',
                 'titles': page_name.encode('utf-8'),
                 'redirects': '1',
-                })
+            })
         if 'query' not in response:
             raise APIError(response)
         _id, page = response['query']['pages'].popitem()
-        returnValue(ArticleExtract(page['extract']))
+        returnValue(ArticleExtract(page['extract'], page['fullurl']))
