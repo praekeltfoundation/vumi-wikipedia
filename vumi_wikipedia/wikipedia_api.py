@@ -33,13 +33,16 @@ class ArticleExtract(object):
     Class representing an article extract
     """
 
-    def __init__(self, data, fullurl):
+    def __init__(self, data, fullurl=''):
+        self.fullurl = fullurl
         if isinstance(data, dict):
             self.sections = [ArticleSection.from_dict(section)
                              for section in data['sections']]
+            self.fullurl = data.get('fullurl', '')
+        elif isinstance(data, list):
+            self.sections = data
         else:
             self._from_string(data)
-        self.fullurl = fullurl
 
     def _from_string(self, data):
         split_data = ARTICLE_SPLITTER.split(data)
@@ -77,8 +80,7 @@ class ArticleExtract(object):
 
     @classmethod
     def from_json(cls, data):
-        obj = json.loads(data)
-        return cls(obj, obj['fullurl'])
+        return cls(json.loads(data))
 
 
 class ArticleSection(object):
