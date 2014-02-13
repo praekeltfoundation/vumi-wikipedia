@@ -489,6 +489,7 @@ class WikipediaWorker(ApplicationWorker):
         ussd_text, sms_text = self.normalize_content(config, content)
         session['sms_content'] = sms_text
         session['sms_offset'] = 0
+        session['fullurl'] = extract.fullurl
         ussd_cont = self.get_ussd_formatter(config).format(
             ussd_text, config.msg_ussd_suffix)
         self.fire_metric(config, 'ussd_session_content')
@@ -516,6 +517,7 @@ class WikipediaWorker(ApplicationWorker):
 
         if msg.get_routing_endpoint() == 'default':
             # We're sending this message in response to a USSD session.
+            sms_content += ' ' + session['fullurl']
             yield self.send_sms_non_reply(msg, config, sms_content)
         elif msg.get_routing_endpoint() == 'sms_content':
             # We're sending this message in response to a 'more content' SMS.

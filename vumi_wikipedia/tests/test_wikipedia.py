@@ -46,8 +46,8 @@ CTHULHU_SMS_NO_MORE = (
 CTHULHU_SMS = (
     u'The first half of the principal manuscript told a very peculiar tale. '
     u'It appears that on 1 March 1925, a thin, dark young man of neurotic ... '
-    u'http://en.wikipedia.org/wiki/Cthulhu '
-    u'(reply for more)')
+    u'(reply for more) '
+    u'http://en.wikipedia.org/wiki/Cthulhu')
 
 CTHULHU_MORE = (
     u'...and excited aspect had called upon Professor Angell bearing the '
@@ -63,7 +63,10 @@ WIKIPEDIA_SECTIONS = u'1. Wikip\xe9dia'
 WIKIPEDIA_USSD = (
     u'Wikip\xe9dia may refer to:\nFrench ...\n(Full content sent by SMS.)')
 WIKIPEDIA_SMS = (
-    u'Wikip\xe9dia may refer to: French Wikipedia ... (reply for more)')
+    u'Wikip\xe9dia may refer to: French Wikipedia ... '
+    u'(reply for more) '
+    u'http://en.wikipedia.org/wiki/Wikip%C3%A9dia'
+    )
 
 WIKIPEDIA_RESULTS_TL = u'1. Wikipedia\n2. Wikipedia\n3. Main Page'
 WIKIPEDIA_SECTIONS_TL = u'1. Wikipedia'
@@ -72,7 +75,10 @@ WIKIPEDIA_USSD_TL = (
     u'Hungarian Wikipedia\nSlovak Wikipedia\n(Full content sent by SMS.)')
 WIKIPEDIA_SMS_TL = (
     u'Wikipedia may refer to: French Wikipedia Portuguese '
-    u'Wikipedia Hungarian Wikipedia Slovak Wikipedia (end of section)')
+    u'Wikipedia Hungarian Wikipedia Slovak Wikipedia '
+    u'(end of section) '
+    u'http://en.wikipedia.org/wiki/Wikip%C3%A9dia'
+    )
 
 
 class WikipediaWorkerTestCase(VumiTestCase, FakeHTTPTestCaseMixin):
