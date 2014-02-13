@@ -49,6 +49,11 @@ CTHULHU_SMS = (
     u'(reply for more) '
     u'http://en.wikipedia.org/wiki/Cthulhu')
 
+CTHULHU_SMS_NO_URL = (
+    u'The first half of the principal manuscript told a very peculiar tale. '
+    u'It appears that on 1 March 1925, a thin, dark young man of neurotic ... '
+    u'(reply for more)')
+
 CTHULHU_MORE = (
     u'...and excited aspect had called upon Professor Angell bearing the '
     u'singular clay bas-relief, which was then exceedingly damp and fresh. '
@@ -177,6 +182,31 @@ class WikipediaWorkerTestCase(VumiTestCase, FakeHTTPTestCaseMixin):
 
         [sms_msg] = self.get_outbound_msgs('sms_content')
         self.assertEqual(CTHULHU_SMS, sms_msg['content'])
+        self.assertEqual('+41791234567', sms_msg['to_addr'])
+        yield self.assert_metrics({
+                'ussd_session_start': 1,
+                'ussd_session_search': 1,
+                'ussd_session_results': 1,
+                'ussd_session_results.1': 1,
+                'ussd_session_sections': 1,
+                'ussd_session_sections.2': 1,
+                'ussd_session_content': 1,
+                'wikipedia_search_call': (0, 1),
+                'wikipedia_extract_call': (0, 1),
+                })
+
+    @inlineCallbacks
+    def test_include_url_in_sms_config(self):
+        yield self.setup_application({
+            'include_url_in_sms': True,
+        })
+        yield self.start_session()
+        yield self.assert_response('cthulhu', CTHULHU_RESULTS)
+        yield self.assert_response('1', CTHULHU_SECTIONS)
+        yield self.assert_response('2', CTHULHU_USSD)
+
+        [sms_msg] = self.get_outbound_msgs('sms_content')
+        self.assertEqual(CTHULHU_SMS_NO_URL, sms_msg['content'])
         self.assertEqual('+41791234567', sms_msg['to_addr'])
         yield self.assert_metrics({
                 'ussd_session_start': 1,
