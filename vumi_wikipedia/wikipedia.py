@@ -34,6 +34,11 @@ class WikipediaConfig(ApplicationWorker.CONFIG_CLASS):
         default='http://en.wikipedia.org/w/api.php')
 
     api_timeout = ConfigInt("API call timeout in seconds.", default=5)
+    include_url_in_sms = ConfigBool(
+        "Include url in 1st SMS",
+        default=False,
+        static=True
+    )
 
     accept_gzip = ConfigBool(
         "If `True`, the HTTP client will request gzipped responses. This is"
@@ -167,6 +172,7 @@ class WikipediaWorker(ApplicationWorker):
 
         self.hash_algorithm = getattr(hashlib, config.hash_algorithm)
         self.secret_key = config.secret_key
+        self.include_url_in_sms = config.include_url_in_sms
 
     def get_redis(self, config):
         return self._redis
@@ -517,7 +523,10 @@ class WikipediaWorker(ApplicationWorker):
 
         if msg.get_routing_endpoint() == 'default':
             # We're sending this message in response to a USSD session.
-            sms_content += ' ' + session['fullurl']
+
+            if self.include_url_in_sms:
+                sms_content += ' ' + session['fullurl']
+
             yield self.send_sms_non_reply(msg, config, sms_content)
         elif msg.get_routing_endpoint() == 'sms_content':
             # We're sending this message in response to a 'more content' SMS.
