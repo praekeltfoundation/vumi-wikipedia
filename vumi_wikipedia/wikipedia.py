@@ -35,7 +35,7 @@ class WikipediaConfig(ApplicationWorker.CONFIG_CLASS):
 
     api_timeout = ConfigInt("API call timeout in seconds.", default=5)
     include_url_in_sms = ConfigBool(
-        "Include url in 1st SMS",
+        "Include url in the first SMS",
         default=False,
         static=True
     )
