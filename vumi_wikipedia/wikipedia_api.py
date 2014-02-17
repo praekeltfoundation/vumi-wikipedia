@@ -48,7 +48,7 @@ class ArticleExtract(object):
             self.fullurl = self._process_fullurl(fullurl)
             self._from_string(data)
 
-    def _process_fullurl(fullurl):
+    def _process_fullurl(self, fullurl):
         '''
         Ensure url is always the mobi url
         TODO: string replace en.* with en.m.*
