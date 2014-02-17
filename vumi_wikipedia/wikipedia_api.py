@@ -34,15 +34,26 @@ class ArticleExtract(object):
     """
 
     def __init__(self, data, fullurl=''):
-        self.fullurl = fullurl
         if isinstance(data, dict):
+            #rebuild AritcleExtract from session
             self.sections = [ArticleSection.from_dict(section)
                              for section in data['sections']]
             self.fullurl = data.get('fullurl', '')
         elif isinstance(data, list):
+            #rebuild ArticleExtract for legacy vumi cached data
             self.sections = data
+            self.fullurl = fullurl
         else:
+            #create ArticleExtract from raw wiki data
+            self.fullurl = self._process_fullurl(fullurl)
             self._from_string(data)
+
+    def _process_fullurl(fullurl):
+        '''
+        Ensure url is always the mobi url
+        TODO: string replace en.* with en.m.*
+        '''
+        return fullurl
 
     def _from_string(self, data):
         split_data = ARTICLE_SPLITTER.split(data)
