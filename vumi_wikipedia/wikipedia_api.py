@@ -45,15 +45,8 @@ class ArticleExtract(object):
             self.fullurl = fullurl
         else:
             #create ArticleExtract from raw wiki data
-            self.fullurl = self._process_fullurl(fullurl)
+            self.fullurl = fullurl
             self._from_string(data)
-
-    def _process_fullurl(self, fullurl):
-        '''
-        Ensure url is always the mobi url
-        TODO: string replace en.* with en.m.*
-        '''
-        return fullurl
 
     def _from_string(self, data):
         split_data = ARTICLE_SPLITTER.split(data)
