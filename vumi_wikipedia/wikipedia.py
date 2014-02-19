@@ -4,6 +4,8 @@ import time
 import json
 import hashlib
 
+from urlparse import urljoin, urlparse
+
 from twisted.internet.defer import inlineCallbacks, returnValue
 from vumi import log
 from vumi.application import ApplicationWorker
@@ -36,8 +38,16 @@ class WikipediaConfig(ApplicationWorker.CONFIG_CLASS):
     api_timeout = ConfigInt("API call timeout in seconds.", default=5)
     include_url_in_sms = ConfigBool(
         "Include url in the first SMS",
-        default=False,
-        static=True
+        default=False
+    )
+    mobi_url_in_sms = ConfigBool(
+        "When including the url in the first sms, use the mobi url instead of"
+        "the desktop version",
+        default=True
+    )
+    mobi_url_host = ConfigText(
+        "The full mobi host url that will be used instead of the fullurl",
+        default="http://en.m.wikipedia.org"
     )
 
     accept_gzip = ConfigBool(
@@ -172,7 +182,6 @@ class WikipediaWorker(ApplicationWorker):
 
         self.hash_algorithm = getattr(hashlib, config.hash_algorithm)
         self.secret_key = config.secret_key
-        self.include_url_in_sms = config.include_url_in_sms
 
     def get_redis(self, config):
         return self._redis
@@ -524,8 +533,9 @@ class WikipediaWorker(ApplicationWorker):
         if msg.get_routing_endpoint() == 'default':
             # We're sending this message in response to a USSD session.
 
-            if self.include_url_in_sms:
-                sms_content += ' ' + session['fullurl']
+            if config.include_url_in_sms:
+                fullurl = self.process_fullurl(config, session['fullurl'])
+                sms_content += ' ' + fullurl
 
             yield self.send_sms_non_reply(msg, config, sms_content)
         elif msg.get_routing_endpoint() == 'sms_content':
@@ -535,6 +545,13 @@ class WikipediaWorker(ApplicationWorker):
                         more=(session['state'] is not None))
 
         returnValue(session)
+
+    def process_fullurl(self, config, fullurl):
+        if not (config.mobi_url_in_sms and fullurl):
+            return fullurl
+
+        uri = urlparse(fullurl)
+        return urljoin(config.mobi_url_host, uri.path)
 
     def send_sms_non_reply(self, msg, config, sms_content):
         return self.send_to(
