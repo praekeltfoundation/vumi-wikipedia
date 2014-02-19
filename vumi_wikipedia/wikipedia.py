@@ -40,14 +40,9 @@ class WikipediaConfig(ApplicationWorker.CONFIG_CLASS):
         "Include url in the first SMS",
         default=False
     )
-    mobi_url_in_sms = ConfigBool(
-        "When including the url in the first sms, use the mobi url instead of"
-        "the desktop version",
-        default=True
-    )
     mobi_url_host = ConfigText(
         "The full mobi host url that will be used instead of the fullurl",
-        default="http://en.m.wikipedia.org"
+        default=None
     )
 
     accept_gzip = ConfigBool(
@@ -547,7 +542,7 @@ class WikipediaWorker(ApplicationWorker):
         returnValue(session)
 
     def process_fullurl(self, config, fullurl):
-        if not (config.mobi_url_in_sms and fullurl):
+        if not (config.mobi_url_host and fullurl):
             return fullurl
 
         uri = urlparse(fullurl)
