@@ -50,15 +50,15 @@ CTHULHU_SMS = (
 
 CTHULHU_SMS_WITH_URL = (
     u'The first half of the principal manuscript told a very peculiar tale. '
-    u'It appears that on 1 March 1925, a thin, dark young man of neurotic ... '
-    u'(reply for more) '
-    u'http://en.wikipedia.org/wiki/Cthulhu')
+    u'It appears that on 1 March 1925, ... '
+    u'http://en.wikipedia.org/wiki/Cthulhu '
+    u'(reply for more)')
 
 CTHULHU_SMS_WITH_AFRIKAANS_URL = (
     u'The first half of the principal manuscript told a very peculiar tale. '
-    u'It appears that on 1 March 1925, a thin, dark young man of neurotic ... '
-    u'(reply for more) '
-    u'http://af.m.wikipedia.org/wiki/Cthulhu')
+    u'It appears that on 1 March ... '
+    u'http://af.m.wikipedia.org/wiki/Cthulhu '
+    u'(reply for more)')
 
 CTHULHU_MORE = (
     u'...and excited aspect had called upon Professor Angell bearing the '

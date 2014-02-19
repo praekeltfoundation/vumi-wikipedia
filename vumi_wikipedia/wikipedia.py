@@ -520,18 +520,14 @@ class WikipediaWorker(ApplicationWorker):
     def send_sms_content(self, msg, config, session):
         content_len, sms_content = self.get_sms_formatter(config).format_more(
             session['sms_content'], session['sms_offset'],
-            config.msg_more_content_suffix, config.msg_no_more_content_suffix)
+            config.msg_more_content_suffix, config.msg_no_more_content_suffix,
+            self.process_fullurl(config, session['fullurl']))
         session['sms_offset'] = session['sms_offset'] + content_len + 1
         if session['sms_offset'] >= len(session['sms_content']):
             session['state'] = None
 
         if msg.get_routing_endpoint() == 'default':
             # We're sending this message in response to a USSD session.
-
-            if config.include_url_in_sms:
-                fullurl = self.process_fullurl(config, session['fullurl'])
-                sms_content += ' ' + fullurl
-
             yield self.send_sms_non_reply(msg, config, sms_content)
         elif msg.get_routing_endpoint() == 'sms_content':
             # We're sending this message in response to a 'more content' SMS.
@@ -542,7 +538,10 @@ class WikipediaWorker(ApplicationWorker):
         returnValue(session)
 
     def process_fullurl(self, config, fullurl):
-        if not (config.mobi_url_host and fullurl):
+        if not (config.include_url_in_sms and fullurl):
+            return ''
+
+        if not config.mobi_url_host:
             return fullurl
 
         uri = urlparse(fullurl)

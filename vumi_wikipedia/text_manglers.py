@@ -79,23 +79,30 @@ class ContentFormatter(object):
         limit = self.unicode_limit if is_unicode(text) else self.ascii_limit
         return limit - extra_len
 
-    def format_more(self, content, offset, more=u'', no_more=u''):
+    def format_more(self, content, offset, more=u'', no_more=u'', fullurl=u''):
         extra_len = 0
         text = content
+
+        if fullurl:
+            suffix = ' ' + fullurl + no_more
+        else:
+            suffix = no_more
 
         if offset > 0:
             text = self.pre_ellipsis + content[offset:]
             extra_len += len(self.pre_ellipsis)
 
-        if len(text) <= self.get_limit(text, len(no_more)):
-            # Everything fits with the `no_more` text.
-            return ((len(text) - extra_len), text + no_more)
+        if len(text) <= self.get_limit(text, len(suffix)):
+            # Everything fits with the `no_more` text and fullurl.
+            return ((len(text) - extra_len), text + suffix)
 
         # It doesn't all fit, so we need ellipsis and `more`
-        return self._format(text, more, extra_len)
+        return self._format(text, more, extra_len, fullurl)
 
-    def _format(self, content, postfix, extra_len):
+    def _format(self, content, postfix, extra_len, fullurl=''):
         text = content
+        if fullurl:
+            postfix = ' ' + fullurl + postfix
 
         if len(text) <= self.get_limit(text, len(postfix)):
             # Everything fits with the `postfix` text.
