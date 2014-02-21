@@ -539,7 +539,7 @@ class WikipediaWorker(ApplicationWorker):
 
     def process_fullurl(self, config, fullurl):
         if not (config.include_url_in_sms and fullurl):
-            return ''
+            return None
 
         if not config.mobi_url_host:
             return fullurl
