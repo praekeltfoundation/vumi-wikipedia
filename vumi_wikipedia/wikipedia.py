@@ -541,7 +541,7 @@ class WikipediaWorker(ApplicationWorker):
         if not (config.include_url_in_sms and fullurl):
             return None
 
-        if not config.mobi_url_host:
+        if config.mobi_url_host is None:
             return fullurl
 
         uri = urlparse(fullurl)
