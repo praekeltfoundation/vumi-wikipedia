@@ -523,7 +523,8 @@ class WikipediaWorker(ApplicationWorker):
 
         fullurl = None
         # Only process the fullurl when we're responding to a USSD session
-        if msg.get_routing_endpoint() == 'default':
+        if msg.get_routing_endpoint() == 'default' and\
+           config.include_url_in_sms:
             fullurl = self.process_fullurl(config, session['fullurl'])
 
         if fullurl:
@@ -550,7 +551,7 @@ class WikipediaWorker(ApplicationWorker):
         returnValue(session)
 
     def process_fullurl(self, config, fullurl):
-        if not (config.include_url_in_sms and fullurl):
+        if not fullurl:
             return None
 
         if config.mobi_url_host is None:
