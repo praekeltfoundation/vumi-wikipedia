@@ -38,26 +38,26 @@ class ArticleExtractTestCase(TestCase):
         self.assertEqual(ae.fullurl, url)
 
     def test_fullurl(self):
-        url = 'http://en.wikipedia.ord/wiki/foo'
+        url = 'http://en.wikipedia.org/wiki/foo'
         ae = make_extract(u'foo\nbar', url)
         self.assert_titles(ae, None)
         self.assert_texts(ae, u'foo\nbar')
         self.assert_fullurl(ae, url)
 
     def test_one_section(self):
-        url = 'http://en.wikipedia.ord/wiki/foo'
+        url = 'http://en.wikipedia.org/wiki/foo'
         ae = make_extract(u'foo\nbar', url)
         self.assert_titles(ae, None)
         self.assert_texts(ae, u'foo\nbar')
 
     def test_multiple_sections(self):
-        url = 'http://en.wikipedia.ord/wiki/foo'
+        url = 'http://en.wikipedia.org/wiki/foo'
         ae = make_extract(u'foo\n\n\n%(2)s bar \nbaz\n%(2)squux\n\n\nlol', url)
         self.assert_titles(ae, None, u'bar', u'quux')
         self.assert_texts(ae, u'foo', u'baz', u'lol')
 
     def test_shallow_nested_sections(self):
-        url = 'http://en.wikipedia.ord/wiki/foo'
+        url = 'http://en.wikipedia.org/wiki/foo'
         ae = make_extract(u'%(2)sfoo\n%(3)s bar \ntext\n%(3)s baz\nblah', url)
         self.assert_titles(ae, None, u'foo')
         self.assert_texts(ae, u'', u'')
@@ -68,7 +68,7 @@ class ArticleExtractTestCase(TestCase):
         self.assert_section(s21, u'baz', u'blah')
 
     def test_deep_nested_sections(self):
-        url = 'http://en.wikipedia.ord/wiki/foo'
+        url = 'http://en.wikipedia.org/wiki/foo'
         ae = make_extract('\n'.join([
                     u'%(2)ss1\nt1',
                     u'%(3)ss20\nt20',
