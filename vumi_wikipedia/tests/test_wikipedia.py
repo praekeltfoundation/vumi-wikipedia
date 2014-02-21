@@ -65,8 +65,18 @@ CTHULHU_MORE = (
     u'singular clay bas-relief, which was then exceedingly damp and fresh. '
     u'... (reply for more)')
 
+CTHULHU_MORE_FOR_SMS_WITH_URL = (
+    u'...a thin, dark young man of neurotic and excited aspect had called '
+    u'upon Professor Angell bearing the singular clay bas-relief, which was '
+    u'... (reply for more)')
+
 CTHULHU_END = (
     u'...anxious to preserve its conservatism, had found him quite hopeless. '
+    u'(end of section)')
+
+CTHULHU_END_FOR_SMS_WITH_URL = (
+    u'...Even the Providence Art Club, anxious to preserve its conservatism, '
+    u'had found him quite hopeless. '
     u'(end of section)')
 
 WIKIPEDIA_RESULTS = u'1. Wikipedia\n2. Wikip\xe9dia\n3. Main Page'
@@ -247,6 +257,49 @@ class WikipediaWorkerTestCase(VumiTestCase, FakeHTTPTestCaseMixin):
             'wikipedia_search_call': (0, 1),
             'wikipedia_extract_call': (0, 1),
         })
+
+    @inlineCallbacks
+    def test_no_url_in_more_sms(self):
+        yield self.setup_application({
+            'include_url_in_sms': True,
+        })
+        yield self.start_session()
+        yield self.assert_response('cthulhu', CTHULHU_RESULTS)
+        yield self.assert_response('1', CTHULHU_SECTIONS)
+        yield self.assert_response('2', CTHULHU_USSD)
+
+        for _ in range(8):
+            yield self.make_dispatch_sms('more')
+
+        sms = self.get_outbound_msgs('sms_content')
+        self.assertEqual(CTHULHU_SMS_WITH_URL, sms[0]['content'])
+        self.assertEqual('+41791234567', sms[0]['to_addr'])
+
+        self.assertEqual(CTHULHU_MORE_FOR_SMS_WITH_URL, sms[1]['content'])
+        self.assertEqual('+41791234567', sms[1]['to_addr'])
+
+        self.assertEqual(CTHULHU_END_FOR_SMS_WITH_URL, sms[-1]['content'])
+        self.assertEqual('+41791234567', sms[-1]['to_addr'])
+        yield self.assert_metrics({
+                'ussd_session_start': 1,
+                'ussd_session_search': 1,
+                'ussd_session_results': 1,
+                'ussd_session_results.1': 1,
+                'ussd_session_sections': 1,
+                'ussd_session_sections.2': 1,
+                'ussd_session_content': 1,
+                'sms_more_content_reply': 8,
+                'sms_more_content_reply.1': 1,
+                'sms_more_content_reply.2': 1,
+                'sms_more_content_reply.3': 1,
+                'sms_more_content_reply.4': 1,
+                'sms_more_content_reply.5': 1,
+                'sms_more_content_reply.6': 1,
+                'sms_more_content_reply.7': 1,
+                'sms_more_content_reply.8': 1,
+                'wikipedia_search_call': (0, 1),
+                'wikipedia_extract_call': (0, 1),
+                })
 
     @inlineCallbacks
     def test_no_metrics_prefix(self):
