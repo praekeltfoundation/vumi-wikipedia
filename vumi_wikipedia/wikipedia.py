@@ -518,10 +518,17 @@ class WikipediaWorker(ApplicationWorker):
 
     @inlineCallbacks
     def send_sms_content(self, msg, config, session):
+        more_suffix = config.msg_more_content_suffix
+        no_more_suffix = config.msg_no_more_content_suffix
+        fullurl = self.process_fullurl(config, session['fullurl'])
+        if fullurl:
+            more_suffix = ' ' + fullurl + more_suffix
+            no_more_suffix = ' ' + fullurl + no_more_suffix
+
         content_len, sms_content = self.get_sms_formatter(config).format_more(
             session['sms_content'], session['sms_offset'],
-            config.msg_more_content_suffix, config.msg_no_more_content_suffix,
-            self.process_fullurl(config, session['fullurl']))
+            more_suffix, no_more_suffix)
+
         session['sms_offset'] = session['sms_offset'] + content_len + 1
         if session['sms_offset'] >= len(session['sms_content']):
             session['state'] = None

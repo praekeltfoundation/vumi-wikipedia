@@ -73,8 +73,8 @@ class ContentFormatterTestCase(TestCase):
     def test_format_more_with_fullurl(self):
         cf = ContentFormatter(160, 70)
         fmt = lambda txt, i: cf.format_more(
-            txt, i, u' (more)', u' (no more)',
-            u'http://en.wiki.org/some_article')
+            txt, i, u' http://en.wiki.org/some_article (more)',
+            u' http://en.wiki.org/some_article (no more)')
 
         self.assertEqual((0, u' http://en.wiki.org/some_article (no more)'),
                          fmt(u'', 0))
