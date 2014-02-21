@@ -522,9 +522,9 @@ class WikipediaWorker(ApplicationWorker):
         no_more_suffix = config.msg_no_more_content_suffix
 
         fullurl = None
-        # Only process the fullurl when we're responding to a USSD session
-        if msg.get_routing_endpoint() == 'default' and\
-           config.include_url_in_sms:
+        # We're processing a USSD message here, ergo this is the first SMS
+        if (msg.get_routing_endpoint() == 'default' and
+                config.include_url_in_sms):
             fullurl = self.process_fullurl(config, session['fullurl'])
 
         if fullurl:
