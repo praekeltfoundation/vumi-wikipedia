@@ -520,7 +520,12 @@ class WikipediaWorker(ApplicationWorker):
     def send_sms_content(self, msg, config, session):
         more_suffix = config.msg_more_content_suffix
         no_more_suffix = config.msg_no_more_content_suffix
-        fullurl = self.process_fullurl(msg, config, session['fullurl'])
+
+        fullurl = None
+        # Only process the fullurl when we're responding to a USSD session
+        if msg.get_routing_endpoint() == 'default':
+            fullurl = self.process_fullurl(config, session['fullurl'])
+
         if fullurl:
             more_suffix = ' ' + fullurl + more_suffix
             no_more_suffix = ' ' + fullurl + no_more_suffix
@@ -544,11 +549,7 @@ class WikipediaWorker(ApplicationWorker):
 
         returnValue(session)
 
-    def process_fullurl(self, msg, config, fullurl):
-        # Only return fullurl when we're responding to a USSD session
-        if msg.get_routing_endpoint() != 'default':
-            return None
-
+    def process_fullurl(self, config, fullurl):
         if not (config.include_url_in_sms and fullurl):
             return None
 
