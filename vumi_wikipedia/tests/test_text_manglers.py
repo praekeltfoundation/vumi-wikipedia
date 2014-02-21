@@ -69,17 +69,3 @@ class ContentFormatterTestCase(TestCase):
                          fmt(long_ascii(), 4))
         self.assertEqual((55, u'...' + long_unicode(14, u' ... (more)')),
                          fmt(long_unicode(), 4))
-
-    def test_format_more_with_fullurl(self):
-        cf = ContentFormatter(160, 70)
-        fmt = lambda txt, i: cf.format_more(
-            txt, i, u' http://en.wiki.org/some_article (more)',
-            u' http://en.wiki.org/some_article (no more)')
-
-        self.assertEqual((0, u' http://en.wiki.org/some_article (no more)'),
-                         fmt(u'', 0))
-
-        self.assertEqual((115, long_ascii(
-            29, u' ... http://en.wiki.org/some_article (more)')),
-            fmt(long_ascii(), 0)
-        )

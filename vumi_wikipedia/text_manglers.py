@@ -88,7 +88,7 @@ class ContentFormatter(object):
             extra_len += len(self.pre_ellipsis)
 
         if len(text) <= self.get_limit(text, len(no_more)):
-            # Everything fits with the `no_more` text and url.
+            # Everything fits with the `no_more` text.
             return ((len(text) - extra_len), text + no_more)
 
         # It doesn't all fit, so we need ellipsis and `more`
