@@ -249,31 +249,6 @@ class WikipediaWorkerTestCase(VumiTestCase, FakeHTTPTestCaseMixin):
         })
 
     @inlineCallbacks
-    def test_disable_host_substitution_for_sms_url(self):
-        yield self.setup_application({
-            'include_url_in_sms': True
-        })
-        yield self.start_session()
-        yield self.assert_response('cthulhu', CTHULHU_RESULTS)
-        yield self.assert_response('1', CTHULHU_SECTIONS)
-        yield self.assert_response('2', CTHULHU_USSD)
-
-        [sms_msg] = self.get_outbound_msgs('sms_content')
-        self.assertEqual(CTHULHU_SMS_WITH_URL, sms_msg['content'])
-        self.assertEqual('+41791234567', sms_msg['to_addr'])
-        yield self.assert_metrics({
-            'ussd_session_start': 1,
-            'ussd_session_search': 1,
-            'ussd_session_results': 1,
-            'ussd_session_results.1': 1,
-            'ussd_session_sections': 1,
-            'ussd_session_sections.2': 1,
-            'ussd_session_content': 1,
-            'wikipedia_search_call': (0, 1),
-            'wikipedia_extract_call': (0, 1),
-        })
-
-    @inlineCallbacks
     def test_no_metrics_prefix(self):
         yield self.setup_application({
             'worker_name': 'wikitest',
