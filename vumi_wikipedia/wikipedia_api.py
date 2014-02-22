@@ -33,10 +33,19 @@ class ArticleExtract(object):
     Class representing an article extract
     """
 
-    def __init__(self, data):
-        if isinstance(data, list):
+    def __init__(self, data, fullurl=''):
+        if isinstance(data, dict):
+            #rebuild AritcleExtract from session
+            self.sections = [ArticleSection.from_dict(section)
+                             for section in data['sections']]
+            self.fullurl = data.get('fullurl', '')
+        elif isinstance(data, list):
+            #rebuild ArticleExtract for legacy vumi cached data
             self.sections = data
+            self.fullurl = fullurl
         else:
+            #create ArticleExtract from raw wiki data
+            self.fullurl = fullurl
             self._from_string(data)
 
     def _from_string(self, data):
@@ -68,12 +77,14 @@ class ArticleExtract(object):
                 self.sections[-1].add_subsection(section)
 
     def to_json(self):
-        return json.dumps([s.to_dict() for s in self.sections])
+        return json.dumps({
+            'fullurl': self.fullurl,
+            'sections': [s.to_dict() for s in self.sections]
+        })
 
     @classmethod
     def from_json(cls, data):
-        return cls([ArticleSection.from_dict(section)
-                    for section in json.loads(data)])
+        return cls(json.loads(data))
 
 
 class ArticleSection(object):
@@ -202,13 +213,14 @@ class WikipediaAPI(object):
         """
         response = yield self._make_call({
                 'action': 'query',
-                'prop': 'extracts',
+                'prop': 'extracts|info',
+                'inprop': 'url',
                 'explaintext': '',
                 'exsectionformat': 'raw',
                 'titles': page_name.encode('utf-8'),
                 'redirects': '1',
-                })
+            })
         if 'query' not in response:
             raise APIError(response)
         _id, page = response['query']['pages'].popitem()
-        returnValue(ArticleExtract(page['extract']))
+        returnValue(ArticleExtract(page['extract'], page['fullurl']))

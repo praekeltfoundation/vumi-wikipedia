@@ -4,6 +4,8 @@ import time
 import json
 import hashlib
 
+from urlparse import urljoin, urlparse
+
 from twisted.internet.defer import inlineCallbacks, returnValue
 from vumi import log
 from vumi.application import ApplicationWorker
@@ -34,6 +36,14 @@ class WikipediaConfig(ApplicationWorker.CONFIG_CLASS):
         default='http://en.wikipedia.org/w/api.php')
 
     api_timeout = ConfigInt("API call timeout in seconds.", default=5)
+    include_url_in_sms = ConfigBool(
+        "Include url in the first SMS",
+        default=False
+    )
+    mobi_url_host = ConfigText(
+        "The full mobi host url that will be used instead of the fullurl",
+        default=None
+    )
 
     accept_gzip = ConfigBool(
         "If `True`, the HTTP client will request gzipped responses. This is"
@@ -489,6 +499,7 @@ class WikipediaWorker(ApplicationWorker):
         ussd_text, sms_text = self.normalize_content(config, content)
         session['sms_content'] = sms_text
         session['sms_offset'] = 0
+        session['fullurl'] = extract.fullurl
         ussd_cont = self.get_ussd_formatter(config).format(
             ussd_text, config.msg_ussd_suffix)
         self.fire_metric(config, 'ussd_session_content')
@@ -507,9 +518,23 @@ class WikipediaWorker(ApplicationWorker):
 
     @inlineCallbacks
     def send_sms_content(self, msg, config, session):
+        more_suffix = config.msg_more_content_suffix
+        no_more_suffix = config.msg_no_more_content_suffix
+
+        fullurl = None
+        # We're processing a USSD message here, ergo this is the first SMS
+        if (msg.get_routing_endpoint() == 'default' and
+                config.include_url_in_sms):
+            fullurl = self.process_fullurl(config, session['fullurl'])
+
+        if fullurl:
+            more_suffix = ' ' + fullurl + more_suffix
+            no_more_suffix = ' ' + fullurl + no_more_suffix
+
         content_len, sms_content = self.get_sms_formatter(config).format_more(
             session['sms_content'], session['sms_offset'],
-            config.msg_more_content_suffix, config.msg_no_more_content_suffix)
+            more_suffix, no_more_suffix)
+
         session['sms_offset'] = session['sms_offset'] + content_len + 1
         if session['sms_offset'] >= len(session['sms_content']):
             session['state'] = None
@@ -524,6 +549,16 @@ class WikipediaWorker(ApplicationWorker):
                         more=(session['state'] is not None))
 
         returnValue(session)
+
+    def process_fullurl(self, config, fullurl):
+        if not fullurl:
+            return None
+
+        if config.mobi_url_host is None:
+            return fullurl
+
+        uri = urlparse(fullurl)
+        return urljoin(config.mobi_url_host, uri.path)
 
     def send_sms_non_reply(self, msg, config, sms_content):
         return self.send_to(

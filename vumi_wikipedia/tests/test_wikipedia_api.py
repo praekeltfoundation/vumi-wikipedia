@@ -16,8 +16,8 @@ class SectionMarkerCreator(object):
         return u'\ufffd\ufffd%s\ufffd\ufffd' % (key,)
 
 
-def make_extract(text):
-    return ArticleExtract(text % SectionMarkerCreator())
+def make_extract(text, fullurl):
+    return ArticleExtract(text % SectionMarkerCreator(), fullurl)
 
 
 class ArticleExtractTestCase(TestCase):
@@ -34,18 +34,31 @@ class ArticleExtractTestCase(TestCase):
         self.assertEqual(title, section.title)
         self.assertEqual(text, section.text)
 
+    def assert_fullurl(self, ae, url):
+        self.assertEqual(ae.fullurl, url)
+
+    def test_fullurl(self):
+        url = 'http://en.wikipedia.org/wiki/foo'
+        ae = make_extract(u'foo\nbar', url)
+        self.assert_titles(ae, None)
+        self.assert_texts(ae, u'foo\nbar')
+        self.assert_fullurl(ae, url)
+
     def test_one_section(self):
-        ae = make_extract(u'foo\nbar')
+        url = 'http://en.wikipedia.org/wiki/foo'
+        ae = make_extract(u'foo\nbar', url)
         self.assert_titles(ae, None)
         self.assert_texts(ae, u'foo\nbar')
 
     def test_multiple_sections(self):
-        ae = make_extract(u'foo\n\n\n%(2)s bar \nbaz\n%(2)squux\n\n\nlol')
+        url = 'http://en.wikipedia.org/wiki/foo'
+        ae = make_extract(u'foo\n\n\n%(2)s bar \nbaz\n%(2)squux\n\n\nlol', url)
         self.assert_titles(ae, None, u'bar', u'quux')
         self.assert_texts(ae, u'foo', u'baz', u'lol')
 
     def test_shallow_nested_sections(self):
-        ae = make_extract(u'%(2)sfoo\n%(3)s bar \ntext\n%(3)s baz\nblah')
+        url = 'http://en.wikipedia.org/wiki/foo'
+        ae = make_extract(u'%(2)sfoo\n%(3)s bar \ntext\n%(3)s baz\nblah', url)
         self.assert_titles(ae, None, u'foo')
         self.assert_texts(ae, u'', u'')
         self.assert_full_texts(ae, u'', u'bar:\n\ntext\n\nbaz:\n\nblah')
@@ -55,6 +68,7 @@ class ArticleExtractTestCase(TestCase):
         self.assert_section(s21, u'baz', u'blah')
 
     def test_deep_nested_sections(self):
+        url = 'http://en.wikipedia.org/wiki/foo'
         ae = make_extract('\n'.join([
                     u'%(2)ss1\nt1',
                     u'%(3)ss20\nt20',
@@ -62,7 +76,7 @@ class ArticleExtractTestCase(TestCase):
                     u'%(4)ss30\nt30',
                     u'%(4)ss31\nt31',
                     u'%(3)ss22\nt22',
-                    ]))
+                    ]), url)
         self.assert_titles(ae, None, u's1')
         self.assert_texts(ae, u'', u't1')
         self.assert_full_texts(ae, u'', '\n\n'.join([
@@ -92,7 +106,7 @@ class ArticleExtractTestCase(TestCase):
         self.assert_section(s22, u's22', u't22')
 
     def test_empty_input(self):
-        ae = ArticleExtract(u'')
+        ae = ArticleExtract(u'', '')
         self.assertEqual([u''], [s.text for s in ae.sections])
         self.assertEqual([None], [s.title for s in ae.sections])
 
