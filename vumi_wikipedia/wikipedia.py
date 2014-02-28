@@ -542,8 +542,8 @@ class WikipediaWorker(ApplicationWorker):
             fullurl = self.process_fullurl(config, session['fullurl'])
 
         if fullurl:
-            more_suffix = ' ' + fullurl + more_suffix
-            no_more_suffix = ' ' + fullurl + no_more_suffix
+            more_suffix = ' %s %s' % (fullurl, more_suffix.lstrip(' '))
+            no_more_suffix = ' %s %s' % (fullurl, no_more_suffix.lstrip(' '))
 
         content_len, sms_content = self.get_sms_formatter(config).format_more(
             session['sms_content'], session['sms_offset'],
