@@ -27,6 +27,20 @@ def mkmenu(options, prefix, start=1):
         ['%s. %s' % (idx, opt) for idx, opt in enumerate(options, start)])
 
 
+def log_escape(obj):
+    """
+    Wrapper around repr() that makes the parser less unhappy with strings.
+    """
+    text = repr(obj)
+    if isinstance(obj, basestring):
+        quote = text[-1]
+        if text[0] != quote:
+            text = text[1:]
+        text = text[1:-1]
+        return text.replace('\\' + quote, quote)
+    return text
+
+
 class WikipediaConfig(ApplicationWorker.CONFIG_CLASS):
     api_url = ConfigUrl(
         "URL for the MediaWiki API to query. This defaults to the English"
@@ -346,8 +360,8 @@ class WikipediaWorker(ApplicationWorker):
         log_parts = [
             'WIKI', self.hash_user(msg.user()), msg['transport_name'],
             msg['transport_type'], msg.get('provider', ''),
-            action, repr(msg['content']),
-        ] + [u'%s=%r' % (k, v) for (k, v) in kw.items()]
+            action, log_escape(msg['content']),
+        ] + [u'%s=%s' % (k, log_escape(v)) for (k, v) in kw.items()]
 
         log.msg(u'\t'.join(unicode(s) for s in log_parts).encode('utf8'))
 
