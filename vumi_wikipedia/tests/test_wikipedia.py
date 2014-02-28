@@ -12,7 +12,7 @@ from vumi.message import TransportUserMessage
 from vumi.tests.helpers import VumiTestCase
 from vumi.tests.utils import LogCatcher
 
-from vumi_wikipedia.wikipedia import WikipediaWorker
+from vumi_wikipedia.wikipedia import WikipediaWorker, log_escape
 from vumi_wikipedia.tests.test_wikipedia_api import (
     FakeHTTPTestCaseMixin, WIKIPEDIA_RESPONSES)
 
@@ -740,7 +740,7 @@ class WikipediaWorkerTestCase(VumiTestCase, FakeHTTPTestCaseMixin):
             self.assertEqual(
                 'WIKI\tfoo\tsphex\tussd\t\tstart\tNone', entry1['message'][0])
             self.assertEqual(
-                ("WIKI\tfoo\tsphex\tussd\t\ttitles\tu'\\tcthulhu\\n'\tfound=9"
+                ("WIKI\tfoo\tsphex\tussd\t\ttitles\t\\tcthulhu\\n\tfound=9"
                  "\tshown=6"), entry2['message'][0])
 
     @inlineCallbacks
@@ -753,3 +753,12 @@ class WikipediaWorkerTestCase(VumiTestCase, FakeHTTPTestCaseMixin):
         self.assertEqual(api.gzip, worker_config.accept_gzip)
         self.assertEqual(api.user_agent, worker_config.user_agent)
         self.assertEqual(api.api_timeout, worker_config.api_timeout)
+
+    def test_log_escape(self):
+        self.assertEqual('None', log_escape(None))
+        self.assertEqual('{}', log_escape({}))
+        self.assertEqual('', log_escape(''))
+        self.assertEqual('"', log_escape('"'))
+        self.assertEqual("'", log_escape("'"))
+        self.assertEqual('"\'', log_escape('"\''))
+        self.assertEqual('"\'', log_escape(u'"\''))
