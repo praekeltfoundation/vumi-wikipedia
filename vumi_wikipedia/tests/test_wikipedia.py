@@ -38,7 +38,7 @@ CTHULHU_USSD = (
     u'It appears that on 1 March 1925, a thin, dark young man of ...\n(Full '
     u'content sent by SMS.)')
 
-CTHULHU_SMS_NO_MORE = (
+CTHULHU_SMS_NO_SUFFIX = (
     u'The first half of the principal manuscript told a very peculiar tale. '
     u'It appears that on 1 March 1925, a thin, dark young man of neurotic and '
     u'excited aspect ...')
@@ -47,6 +47,11 @@ CTHULHU_SMS = (
     u'The first half of the principal manuscript told a very peculiar tale. '
     u'It appears that on 1 March 1925, a thin, dark young man of neurotic ... '
     u'(reply for more)')
+
+CTHULHU_SMS_NO_SPACE = (
+    u'The first half of the principal manuscript told a very peculiar tale. '
+    u'It appears that on 1 March 1925, a thin, dark young man of neurotic '
+    u'...(reply for more)')
 
 CTHULHU_SMS_WITH_URL = (
     u'The first half of the principal manuscript told a very peculiar tale. '
@@ -73,6 +78,13 @@ CTHULHU_MORE_FOR_SMS_WITH_URL = (
 CTHULHU_END = (
     u'...anxious to preserve its conservatism, had found him quite hopeless. '
     u'(end of section)')
+
+CTHULHU_END_NO_SPACE = (
+    u'...conservatism, had found him quite hopeless.(end of section)')
+
+CTHULHU_END_NO_SUFFIX = (
+    u'...Club, anxious to preserve its conservatism, had found him quite '
+    u'hopeless.')
 
 CTHULHU_END_FOR_SMS_WITH_URL = (
     u'...Even the Providence Art Club, anxious to preserve its conservatism, '
@@ -211,6 +223,32 @@ class WikipediaWorkerTestCase(VumiTestCase, FakeHTTPTestCaseMixin):
     def test_include_url_in_sms_config(self):
         yield self.setup_application({
             'include_url_in_sms': True,
+        })
+        yield self.start_session()
+        yield self.assert_response('cthulhu', CTHULHU_RESULTS)
+        yield self.assert_response('1', CTHULHU_SECTIONS)
+        yield self.assert_response('2', CTHULHU_USSD)
+
+        [sms_msg] = self.get_outbound_msgs('sms_content')
+        self.assertEqual(CTHULHU_SMS_WITH_URL, sms_msg['content'])
+        self.assertEqual('+41791234567', sms_msg['to_addr'])
+        yield self.assert_metrics({
+            'ussd_session_start': 1,
+            'ussd_session_search': 1,
+            'ussd_session_results': 1,
+            'ussd_session_results.1': 1,
+            'ussd_session_sections': 1,
+            'ussd_session_sections.2': 1,
+            'ussd_session_content': 1,
+            'wikipedia_search_call': (0, 1),
+            'wikipedia_extract_call': (0, 1),
+        })
+
+    @inlineCallbacks
+    def test_include_url_in_sms_no_suffix_space(self):
+        yield self.setup_application({
+            'include_url_in_sms': True,
+            'msg_more_content_suffix': '(reply for more)',
         })
         yield self.start_session()
         yield self.assert_response('cthulhu', CTHULHU_RESULTS)
@@ -473,6 +511,87 @@ class WikipediaWorkerTestCase(VumiTestCase, FakeHTTPTestCaseMixin):
         self.assertEqual('+41791234567', sms[1]['to_addr'])
 
         self.assertEqual(CTHULHU_END, sms[-1]['content'])
+        self.assertEqual('+41791234567', sms[-1]['to_addr'])
+        yield self.assert_metrics({
+                'ussd_session_start': 1,
+                'ussd_session_search': 1,
+                'ussd_session_results': 1,
+                'ussd_session_results.1': 1,
+                'ussd_session_sections': 1,
+                'ussd_session_sections.2': 1,
+                'ussd_session_content': 1,
+                'sms_more_content_reply': 8,
+                'sms_more_content_reply.1': 1,
+                'sms_more_content_reply.2': 1,
+                'sms_more_content_reply.3': 1,
+                'sms_more_content_reply.4': 1,
+                'sms_more_content_reply.5': 1,
+                'sms_more_content_reply.6': 1,
+                'sms_more_content_reply.7': 1,
+                'sms_more_content_reply.8': 1,
+                'wikipedia_search_call': (0, 1),
+                'wikipedia_extract_call': (0, 1),
+                })
+
+    @inlineCallbacks
+    def test_happy_flow_more_no_suffix(self):
+        yield self.setup_application({
+            'msg_more_content_suffix': '',
+            'msg_no_more_content_suffix': '',
+        })
+        yield self.start_session()
+        yield self.assert_response('cthulhu', CTHULHU_RESULTS)
+        yield self.assert_response('1', CTHULHU_SECTIONS)
+        yield self.assert_response('2', CTHULHU_USSD)
+
+        for _ in range(7):
+            yield self.make_dispatch_sms('more')
+
+        sms = self.get_outbound_msgs('sms_content')
+        self.assertEqual(CTHULHU_SMS_NO_SUFFIX, sms[0]['content'])
+        self.assertEqual('+41791234567', sms[0]['to_addr'])
+
+        self.assertEqual(CTHULHU_END_NO_SUFFIX, sms[-1]['content'])
+        self.assertEqual('+41791234567', sms[-1]['to_addr'])
+        yield self.assert_metrics({
+                'ussd_session_start': 1,
+                'ussd_session_search': 1,
+                'ussd_session_results': 1,
+                'ussd_session_results.1': 1,
+                'ussd_session_sections': 1,
+                'ussd_session_sections.2': 1,
+                'ussd_session_content': 1,
+                'sms_more_content_reply': 7,
+                'sms_more_content_reply.1': 1,
+                'sms_more_content_reply.2': 1,
+                'sms_more_content_reply.3': 1,
+                'sms_more_content_reply.4': 1,
+                'sms_more_content_reply.5': 1,
+                'sms_more_content_reply.6': 1,
+                'sms_more_content_reply.7': 1,
+                'wikipedia_search_call': (0, 1),
+                'wikipedia_extract_call': (0, 1),
+                })
+
+    @inlineCallbacks
+    def test_happy_flow_more_no_space(self):
+        yield self.setup_application({
+            'msg_more_content_suffix': '(reply for more)',
+            'msg_no_more_content_suffix': '(end of section)',
+        })
+        yield self.start_session()
+        yield self.assert_response('cthulhu', CTHULHU_RESULTS)
+        yield self.assert_response('1', CTHULHU_SECTIONS)
+        yield self.assert_response('2', CTHULHU_USSD)
+
+        for _ in range(8):
+            yield self.make_dispatch_sms('more')
+
+        sms = self.get_outbound_msgs('sms_content')
+        self.assertEqual(CTHULHU_SMS_NO_SPACE, sms[0]['content'])
+        self.assertEqual('+41791234567', sms[0]['to_addr'])
+
+        self.assertEqual(CTHULHU_END_NO_SPACE, sms[-1]['content'])
         self.assertEqual('+41791234567', sms[-1]['to_addr'])
         yield self.assert_metrics({
                 'ussd_session_start': 1,
