@@ -59,6 +59,12 @@ CTHULHU_SMS_WITH_URL = (
     u'http://en.wikipedia.org/wiki/Cthulhu '
     u'(reply for more)')
 
+CTHULHU_SMS_WITH_SHORTENED_URL = (
+    u'The first half of the principal manuscript told a very peculiar tale. '
+    u'It appears that on 1 March 1925, a thin, dark ... '
+    u'http://wtxt.io/aaa '
+    u'(reply for more)')
+
 CTHULHU_SMS_WITH_AFRIKAANS_URL = (
     u'The first half of the principal manuscript told a very peculiar tale. '
     u'It appears that on 1 March ... '
@@ -231,6 +237,33 @@ class WikipediaWorkerTestCase(VumiTestCase, FakeHTTPTestCaseMixin):
 
         [sms_msg] = self.get_outbound_msgs('sms_content')
         self.assertEqual(CTHULHU_SMS_WITH_URL, sms_msg['content'])
+        self.assertEqual('+41791234567', sms_msg['to_addr'])
+        yield self.assert_metrics({
+            'ussd_session_start': 1,
+            'ussd_session_search': 1,
+            'ussd_session_results': 1,
+            'ussd_session_results.1': 1,
+            'ussd_session_sections': 1,
+            'ussd_session_sections.2': 1,
+            'ussd_session_content': 1,
+            'wikipedia_search_call': (0, 1),
+            'wikipedia_extract_call': (0, 1),
+        })
+
+    @inlineCallbacks
+    def test_include_shortened_url_in_sms_config(self):
+        yield self.setup_application({
+            'include_url_in_sms': True,
+            'mobi_url_host': 'http://en.m.wikipedia.org',
+            'shortening_api_url': self.url,
+        })
+        yield self.start_session()
+        yield self.assert_response('cthulhu', CTHULHU_RESULTS)
+        yield self.assert_response('1', CTHULHU_SECTIONS)
+        yield self.assert_response('2', CTHULHU_USSD)
+
+        [sms_msg] = self.get_outbound_msgs('sms_content')
+        self.assertEqual(CTHULHU_SMS_WITH_SHORTENED_URL, sms_msg['content'])
         self.assertEqual('+41791234567', sms_msg['to_addr'])
         yield self.assert_metrics({
             'ussd_session_start': 1,

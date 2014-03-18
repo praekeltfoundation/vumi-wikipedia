@@ -74,6 +74,12 @@
         "response_body": {"query":{"pages":{"2316250":{"pageid":2316250,"ns":0,"title":"Wikip\u00e9dia","extract":"Wikip\u00e9dia may refer to:\nFrench Wikipedia\nPortuguese Wikipedia\nHungarian Wikipedia\nSlovak Wikipedia","fullurl":"http://en.wikipedia.org/wiki/Wikip%C3%A9dia","editurl":"http://en.wikipedia.org/w/index.php?title=Wikip%C3%A9dia&action=edit"}}}}
     },
 
+    "PUT /create": {
+        "request_body": {"long_url": "http://en.m.wikipedia.org/wiki/Cthulhu", "user_token": "+41791234567"},
+        "response_code": "200 OK",
+        "response_body": {"short_url": "http://wtxt.io/aaa"}
+    },
+
     "So I don't have to keep screwing around with trailing commas.": null
 
 }

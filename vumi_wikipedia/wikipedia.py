@@ -20,6 +20,7 @@ from vumi_wikipedia.wikipedia_api import WikipediaAPI, ArticleExtract, APIError
 from vumi_wikipedia.text_manglers import (
     ContentFormatter, normalize_whitespace, transliterate_unicode,
     minimize_unicode)
+from vumi.utils import http_request_full
 
 
 def mkmenu(options, prefix, start=1):
@@ -56,6 +57,10 @@ class WikipediaConfig(ApplicationWorker.CONFIG_CLASS):
     )
     mobi_url_host = ConfigText(
         "The full mobi host url that will be used instead of the fullurl",
+        default=None
+    )
+    shortening_api_url = ConfigUrl(
+        "URL for the Praekelt URL Shortening Service",
         default=None
     )
 
@@ -539,7 +544,8 @@ class WikipediaWorker(ApplicationWorker):
         # We're processing a USSD message here, ergo this is the first SMS
         if (msg.get_routing_endpoint() == 'default' and
                 config.include_url_in_sms):
-            fullurl = self.process_fullurl(config, session['fullurl'])
+            fullurl = yield self.process_fullurl(
+                msg, config, session['fullurl'])
 
         if fullurl:
             more_suffix = ' %s %s' % (fullurl, more_suffix.lstrip(' '))
@@ -564,15 +570,41 @@ class WikipediaWorker(ApplicationWorker):
 
         returnValue(session)
 
-    def process_fullurl(self, config, fullurl):
+    @inlineCallbacks
+    def process_fullurl(self, msg, config, fullurl):
         if not fullurl:
-            return None
+            url = None
+        else:
+            if config.mobi_url_host is None:
+                url = fullurl
+            else:
+                uri = urlparse(fullurl)
+                url = urljoin(config.mobi_url_host, uri.path)
 
-        if config.mobi_url_host is None:
-            return fullurl
+            if config.shortening_api_url:
+                url = yield self.get_shortened_url(msg, config, url)
+        returnValue(url)
 
-        uri = urlparse(fullurl)
-        return urljoin(config.mobi_url_host, uri.path)
+    @inlineCallbacks
+    def get_shortened_url(self, msg, config, url):
+        if isinstance(url, unicode):
+            url = url.encode('utf-8')
+
+        user_id = msg.user()
+
+        headers = {'User-Agent': 'vumi-wikipedia-http-request', 'content-type': 'x-application-json'}
+        payload = {'long_url': url, 'user_token': user_id}
+        api_url = urljoin(config.shortening_api_url.geturl(), 'create')
+        response = yield http_request_full(
+            api_url, json.dumps(payload), headers, method='PUT')
+        try:
+            result = json.loads(response.delivered_body)
+            returnValue(result['short_url'])
+        except Exception, e:
+            log.msg("Error reading API response: %s %r" % (
+                    response.code, response.delivered_body))
+            log.err()
+            raise APIError(e)
 
     def send_sms_non_reply(self, msg, config, sms_content):
         return self.send_to(

@@ -150,7 +150,10 @@ class FakeHTTP(Protocol):
         if not response_data:
             self.factory.testcase.fail(
                 "Unexpected request: %s" % (request_line,))
-        self.factory.testcase.assertEqual(response_data["request_body"], body)
+        resp_body = response_data["request_body"]
+        if resp_body:
+            resp_body = json.dumps(resp_body)
+        self.factory.testcase.assertEqual(resp_body, body)
         return self.build_response(response_data)
 
 
