@@ -4,6 +4,7 @@ import json
 import hashlib
 import logging
 from urlparse import urlparse
+from pkg_resources import resource_stream
 
 from twisted.internet.defer import inlineCallbacks
 
@@ -15,6 +16,8 @@ from vumi.tests.utils import LogCatcher
 from vumi_wikipedia.wikipedia import WikipediaWorker, log_escape
 from vumi_wikipedia.tests.test_wikipedia_api import (
     FakeHTTPTestCaseMixin, WIKIPEDIA_RESPONSES)
+USS_RESPONSES = json.load(
+    resource_stream(__name__, 'uss_responses.json'))
 
 
 CTHULHU_RESULTS = '\n'.join([
@@ -122,7 +125,8 @@ class WikipediaWorkerTestCase(VumiTestCase, FakeHTTPTestCaseMixin):
     def setUp(self):
         self.app_helper = self.add_helper(ApplicationHelper(
             WikipediaWorker, transport_type='ussd'))
-        yield self.start_webserver(WIKIPEDIA_RESPONSES)
+        self.url = yield self.start_webserver(WIKIPEDIA_RESPONSES)
+        self.uss_url = yield self.start_webserver(USS_RESPONSES)
 
     @inlineCallbacks
     def setup_application(self, config={}, use_defaults=True):
@@ -255,7 +259,7 @@ class WikipediaWorkerTestCase(VumiTestCase, FakeHTTPTestCaseMixin):
         yield self.setup_application({
             'include_url_in_sms': True,
             'mobi_url_host': 'http://en.m.wikipedia.org',
-            'shortening_api_url': self.url,
+            'shortening_api_url': self.uss_url,
         })
         yield self.start_session()
         yield self.assert_response('cthulhu', CTHULHU_RESULTS)
