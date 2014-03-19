@@ -6,6 +6,7 @@ from twisted.internet import reactor
 from twisted.internet.defer import inlineCallbacks
 from twisted.internet.protocol import Protocol, Factory
 from twisted.trial.unittest import TestCase
+from vumi.tests.helpers import VumiTestCase
 from vumi.utils import HttpTimeoutError
 
 from vumi_wikipedia.wikipedia_api import WikipediaAPI, ArticleExtract, APIError
@@ -158,18 +159,16 @@ class FakeHTTP(Protocol):
 
 
 class FakeHTTPTestCaseMixin(object):
-    @inlineCallbacks
     def start_webserver(self, response_data):
         factory = Factory()
         factory.protocol = FakeHTTP
         factory.response_data = response_data
         factory.testcase = self
-        self.webserver = yield reactor.listenTCP(0, factory)
-        addr = self.webserver.getHost()
-        self.url = "http://%s:%s/" % (addr.host, addr.port)
-
-    def stop_webserver(self):
-        return self.webserver.loseConnection()
+        webserver = reactor.listenTCP(0, factory, interface='127.0.0.1')
+        self.add_cleanup(webserver.loseConnection)
+        addr = webserver.getHost()
+        webserver.url = "http://%s:%s/" % (addr.host, addr.port)
+        return webserver
 
 
 def debug_api_call(func):
@@ -181,16 +180,10 @@ def debug_api_call(func):
     return wrapped_test
 
 
-class WikipediaAPITestCase(TestCase, FakeHTTPTestCaseMixin):
-    timeout = 10
-
-    @inlineCallbacks
+class WikipediaAPITestCase(VumiTestCase, FakeHTTPTestCaseMixin):
     def setUp(self):
-        yield self.start_webserver(WIKIPEDIA_RESPONSES)
-        self.wikipedia = WikipediaAPI(self.url, False)
-
-    def tearDown(self):
-        return self.stop_webserver()
+        self.fake_api = self.start_webserver(WIKIPEDIA_RESPONSES)
+        self.wikipedia = WikipediaAPI(self.fake_api.url, False)
 
     def assert_api_result(self, api_result_d, expected):
         return api_result_d.addCallback(self.assertEqual, expected)
@@ -228,11 +221,11 @@ class WikipediaAPITestCase(TestCase, FakeHTTPTestCaseMixin):
     def test_user_agent(self):
         self.expected_user_agent = self.wikipedia.USER_AGENT
         yield self.wikipedia.get_extract('Cthulhu')
-        self.wikipedia = WikipediaAPI(self.url, False, 'Bob Howard')
+        self.wikipedia = WikipediaAPI(self.fake_api.url, False, 'Bob Howard')
         self.expected_user_agent = 'Bob Howard'
         yield self.wikipedia.get_extract('Cthulhu')
 
     def test_api_timeout(self):
-        self.wikipedia = WikipediaAPI(self.url, False, api_timeout=0)
+        self.wikipedia = WikipediaAPI(self.fake_api.url, False, api_timeout=0)
         return self.assertFailure(
             self.wikipedia.get_extract('Cthulhu'), HttpTimeoutError)
