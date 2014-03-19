@@ -592,7 +592,10 @@ class WikipediaWorker(ApplicationWorker):
 
         user_id = msg.user()
 
-        headers = {'User-Agent': 'vumi-wikipedia-http-request', 'content-type': 'x-application-json'}
+        headers = {
+            'User-Agent': 'vumi-wikipedia-http-request',
+            'content-type': 'application/json'
+        }
         payload = {'long_url': url, 'user_token': user_id}
         api_url = urljoin(config.shortening_api_url.geturl(), 'create')
         response = yield http_request_full(
