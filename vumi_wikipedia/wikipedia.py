@@ -5,7 +5,7 @@ import time
 import json
 import hashlib
 
-from urlparse import urljoin, urlparse
+from urlparse import urljoin, urlparse, urlunparse
 
 from twisted.internet.defer import inlineCallbacks, returnValue
 from vumi import log
@@ -630,9 +630,9 @@ class WikipediaWorker(ApplicationWorker):
                 'Authorization': 'Basic ' + base64.b64encode(
                 '%s:%s' % (uri.username, uri.password))
             }
-            url = urlunparse(
+            url = urlunparse((
                 uri.scheme, hostname, uri.path,
-                uri.params, uri.query, uri.fragment)
+                uri.params, uri.query, uri.fragment))
         return header, url
 
     def send_sms_non_reply(self, msg, config, sms_content):
