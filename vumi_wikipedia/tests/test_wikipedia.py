@@ -121,18 +121,17 @@ WIKIPEDIA_SMS_TL = (
 
 class WikipediaWorkerTestCase(VumiTestCase, FakeHTTPTestCaseMixin):
 
-    @inlineCallbacks
     def setUp(self):
         self.app_helper = self.add_helper(ApplicationHelper(
             WikipediaWorker, transport_type='ussd'))
-        self.url = yield self.start_webserver(WIKIPEDIA_RESPONSES)
-        self.uss_url = yield self.start_webserver(USS_RESPONSES)
+        self.fake_api = self.start_webserver(WIKIPEDIA_RESPONSES)
+        self.fake_uss = self.start_webserver(USS_RESPONSES)
 
     @inlineCallbacks
     def setup_application(self, config={}, use_defaults=True):
         defaults = {
             'worker_name': 'wikitest',
-            'api_url': self.url,
+            'api_url': self.fake_api.url,
             'metrics_prefix': 'test.metrics.wikipedia',
             'hash_algorithm': 'sha256',
             'secret_key': 'foo',
@@ -184,11 +183,6 @@ class WikipediaWorkerTestCase(VumiTestCase, FakeHTTPTestCaseMixin):
     def start_session(self):
         return self.assert_response(
             None, 'What would you like to search Wikipedia for?')
-
-    @inlineCallbacks
-    def tearDown(self):
-        yield self.stop_webserver()
-        yield super(WikipediaWorkerTestCase, self).tearDown()
 
     @inlineCallbacks
     def assert_config_knob(self, attr, orig, new):
@@ -259,7 +253,7 @@ class WikipediaWorkerTestCase(VumiTestCase, FakeHTTPTestCaseMixin):
         yield self.setup_application({
             'include_url_in_sms': True,
             'mobi_url_host': 'http://en.m.wikipedia.org',
-            'shortening_api_url': self.uss_url,
+            'shortening_api_url': self.fake_uss.url,
         })
         yield self.start_session()
         yield self.assert_response('cthulhu', CTHULHU_RESULTS)
@@ -380,7 +374,7 @@ class WikipediaWorkerTestCase(VumiTestCase, FakeHTTPTestCaseMixin):
     def test_no_metrics_prefix(self):
         yield self.setup_application({
             'worker_name': 'wikitest',
-            'api_url': self.url,
+            'api_url': self.fake_api.url,
         }, use_defaults=False)
         # Make sure it's safe to fire a metric when we aren't collecting them.
         self.worker.fire_metric(None, 'foo')
@@ -513,7 +507,7 @@ class WikipediaWorkerTestCase(VumiTestCase, FakeHTTPTestCaseMixin):
             'max_sms_unicode_length': 130,
         })
 
-        yield self.assert_config_knob('api_url', urlparse(self.url),
+        yield self.assert_config_knob('api_url', urlparse(self.fake_api.url),
              urlparse('https://localhost:1337/'))
         yield self.assert_config_knob('accept_gzip', False, True)
         yield self.assert_config_knob(
@@ -716,7 +710,7 @@ class WikipediaWorkerTestCase(VumiTestCase, FakeHTTPTestCaseMixin):
         yield self.assert_response('2', CTHULHU_USSD)
 
         cache_keys = yield self.worker.extract_redis.keys('*')
-        self.assertEqual(['%s:Cthulhu' % (self.url,)], cache_keys)
+        self.assertEqual(['%s:Cthulhu' % (self.fake_api.url,)], cache_keys)
 
         [sms_msg] = self.get_outbound_msgs('sms_content')
         self.assertEqual(CTHULHU_SMS, sms_msg['content'])
