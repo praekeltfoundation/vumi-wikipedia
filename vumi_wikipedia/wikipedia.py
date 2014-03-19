@@ -573,16 +573,16 @@ class WikipediaWorker(ApplicationWorker):
     @inlineCallbacks
     def process_fullurl(self, msg, config, fullurl):
         if not fullurl:
-            url = None
-        else:
-            if config.mobi_url_host is None:
-                url = fullurl
-            else:
-                uri = urlparse(fullurl)
-                url = urljoin(config.mobi_url_host, uri.path)
+            returnValue(None)
 
-            if config.shortening_api_url:
-                url = yield self.get_shortened_url(msg, config, url)
+        if config.mobi_url_host is None:
+            returnValue(fullurl)
+
+        uri = urlparse(fullurl)
+        url = urljoin(config.mobi_url_host, uri.path)
+
+        if config.shortening_api_url:
+            url = yield self.get_shortened_url(msg, config, url)
         returnValue(url)
 
     @inlineCallbacks
