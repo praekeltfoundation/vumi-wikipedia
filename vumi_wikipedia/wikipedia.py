@@ -590,13 +590,13 @@ class WikipediaWorker(ApplicationWorker):
         if isinstance(url, unicode):
             url = url.encode('utf-8')
 
-        user_id = msg.user()
+        user_token = self.hash_user(msg.user())
 
         headers = {
             'User-Agent': 'vumi-wikipedia-http-request',
             'content-type': 'application/json'
         }
-        payload = {'long_url': url, 'user_token': user_id}
+        payload = {'long_url': url, 'user_token': user_token}
         api_url = urljoin(config.shortening_api_url.geturl(), 'create')
         response = yield http_request_full(
             api_url, json.dumps(payload), headers, method='PUT')
