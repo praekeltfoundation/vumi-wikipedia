@@ -1,10 +1,11 @@
 # -*- test-case-name: vumi_wikipedia.tests.test_wikipedia -*-
 
+import base64
 import time
 import json
 import hashlib
 
-from urlparse import urljoin, urlparse
+from urlparse import urljoin, urlparse, urlunparse
 
 from twisted.internet.defer import inlineCallbacks, returnValue
 from vumi import log
@@ -596,8 +597,16 @@ class WikipediaWorker(ApplicationWorker):
             'User-Agent': 'vumi-wikipedia-http-request',
             'content-type': 'application/json'
         }
+
+        shortening_api_url = config.shortening_api_url.geturl()
+        auth_header, clean_api_url = self.get_basic_auth_header(
+            shortening_api_url
+        )
+        if auth_header:
+            headers.update(auth_header)
+
         payload = {'long_url': url, 'user_token': user_token}
-        api_url = urljoin(config.shortening_api_url.geturl(), 'create')
+        api_url = urljoin(clean_api_url, 'create')
         response = yield http_request_full(
             api_url, json.dumps(payload), headers, method='PUT')
         try:
@@ -608,6 +617,23 @@ class WikipediaWorker(ApplicationWorker):
                     response.code, response.delivered_body))
             log.err()
             raise APIError(e)
+
+    def get_basic_auth_header(self, url):
+        uri = urlparse(url)
+        hostname = uri.hostname
+        if uri.port:
+            hostname += ':' + str(uri.port)
+
+        header = None
+        if uri.username and uri.password:
+            header = {
+                'Authorization': 'Basic ' + base64.b64encode(
+                '%s:%s' % (uri.username, uri.password))
+            }
+            url = urlunparse((
+                uri.scheme, hostname, uri.path,
+                uri.params, uri.query, uri.fragment))
+        return header, url
 
     def send_sms_non_reply(self, msg, config, sms_content):
         return self.send_to(

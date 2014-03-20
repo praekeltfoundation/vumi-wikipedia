@@ -912,3 +912,22 @@ class WikipediaWorkerTestCase(VumiTestCase, FakeHTTPTestCaseMixin):
         self.assertEqual("'", log_escape("'"))
         self.assertEqual('"\'', log_escape('"\''))
         self.assertEqual('"\'', log_escape(u'"\''))
+
+    @inlineCallbacks
+    def test_basic_auth_url(self):
+        yield self.setup_application()
+        header, url = self.worker.get_basic_auth_header('http://wtxt.io/api/')
+        self.assertEqual(header, None)
+        self.assertEqual(url, 'http://wtxt.io/api/')
+
+        header, url = self.worker.get_basic_auth_header('http://wtxt.io:80/api/')
+        self.assertEqual(header, None)
+        self.assertEqual(url, 'http://wtxt.io:80/api/')
+
+        header, url = self.worker.get_basic_auth_header('http://test:user@wtxt.io/api/')
+        self.assertEqual(header, {'Authorization': 'Basic dGVzdDp1c2Vy'})
+        self.assertEqual(url, 'http://wtxt.io/api/')
+
+        header, url = self.worker.get_basic_auth_header('http://test:user@wtxt.io:80/api/')
+        self.assertEqual(header, {'Authorization': 'Basic dGVzdDp1c2Vy'})
+        self.assertEqual(url, 'http://wtxt.io:80/api/')
