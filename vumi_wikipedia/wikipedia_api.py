@@ -191,12 +191,11 @@ class WikipediaAPI(object):
         :returns: `list` of article titles matching search terms.
         """
         response = yield self._make_call({
-            'action': 'query',
-            'list': 'search',
-            'srsearch': query.encode('utf-8'),
-            'srbackend': 'CirrusSearch',
-            'srlimit': str(limit),
-        })
+                'action': 'query',
+                'list': 'search',
+                'srsearch': query.encode('utf-8'),
+                'srlimit': str(limit),
+                })
         if 'query' not in response:
             raise APIError(response)
         results = [r['title']
