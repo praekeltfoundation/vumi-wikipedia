@@ -198,6 +198,13 @@ class WikipediaAPITestCase(VumiTestCase, FakeHTTPTestCaseMixin):
             self.wikipedia.search('vumi', limit=2),
             [u'Arambagh Utsab', u'Vulpia microstachys'])
 
+    @inlineCallbacks
+    def test_search_custom_backend(self):
+        yield self.assert_api_result(
+            self.wikipedia.search('wikipedia', limit=3,
+                                  backend='CirrusSearch'),
+            [u'Wikipedia', u'Wikip\xe9dia', u'English Wikipedia'])
+
     def test_search_error(self):
         return self.assertFailure(self.wikipedia.search('.'), APIError)
 

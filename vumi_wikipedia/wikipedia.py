@@ -65,6 +65,10 @@ class WikipediaConfig(ApplicationWorker.CONFIG_CLASS):
         default=None
     )
 
+    search_backend = ConfigText(
+        "The Wikimedia search backend to use.", default=None, required=False,
+        static=True)
+
     accept_gzip = ConfigBool(
         "If `True`, the HTTP client will request gzipped responses. This is"
         " generally beneficial, although it requires Twisted 11.1 or later.",
@@ -437,7 +441,8 @@ class WikipediaWorker(ApplicationWorker):
         query = msg['content'].strip()
 
         with self.get_timer_metric(config, 'wikipedia_search_call'):
-            results = yield self.get_wikipedia_api(config).search(query)
+            api = self.get_wikipedia_api(config)
+            results = yield api.search(query, backend=config.search_backend)
         if results:
             count, msgcontent = self.make_options(config, results)
             session['results'] = json.dumps(results[:count])

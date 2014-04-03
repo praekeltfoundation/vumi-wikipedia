@@ -181,21 +181,29 @@ class WikipediaAPI(object):
             raise APIError(e)
 
     @inlineCallbacks
-    def search(self, query, limit=9):
+    def search(self, query, limit=9, backend=None):
         """
         Perform a query and returns a list of results matching the query.
 
         :param unicode query: Search terms.
         :param int limit: Maximum number of results to return. (Default 9)
+        :param unicode backend: The backend to use. Defaults to whatever
+            Wikimedia uses. See
+            http://en.wikipedia.org/w/api.php?action=help&modules=query+search
+            for list of available backends.
 
         :returns: `list` of article titles matching search terms.
         """
-        response = yield self._make_call({
-                'action': 'query',
-                'list': 'search',
-                'srsearch': query.encode('utf-8'),
-                'srlimit': str(limit),
-                })
+        params = {
+            'action': 'query',
+            'list': 'search',
+            'srsearch': query.encode('utf-8'),
+            'srlimit': str(limit),
+        }
+        if backend is not None:
+            params['srbackend'] = backend
+
+        response = yield self._make_call(params)
         if 'query' not in response:
             raise APIError(response)
         results = [r['title']
