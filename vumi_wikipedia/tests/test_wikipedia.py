@@ -29,6 +29,17 @@ CTHULHU_RESULTS = '\n'.join([
         u'6. The Call of Cthulhu',
         ])
 
+CTHULHU_CIRRUS_RESULTS = '\n'.join([
+    '1. Cthulhu',
+    '2. Cthulhu Mythos',
+    '3. Cthulhu Mythos anthology',
+    '4. Call of Cthulhu (role-playing game)',
+    '5. Cthulhu Mythos deities',
+    '6. The Call of Cthulhu',
+    '7. I, Cthulhu',
+])
+
+
 CTHULHU_SECTIONS = '\n'.join([
         u'1. Cthulhu',
         u'2. History',
@@ -522,6 +533,14 @@ class WikipediaWorkerTestCase(VumiTestCase, FakeHTTPTestCaseMixin):
         yield self.assert_config_knob('max_sms_content_length', 160, 300)
         yield self.assert_config_knob('max_sms_unicode_length', 70, 130)
         yield self.assert_config_knob('api_timeout', 5, 10)
+
+    @inlineCallbacks
+    def test_search_custom_backend(self):
+        yield self.setup_application({
+            'search_backend': 'CirrusSearch',
+        })
+        yield self.start_session()
+        yield self.assert_response('cthulhu', CTHULHU_CIRRUS_RESULTS)
 
     @inlineCallbacks
     def test_happy_flow_more(self):
