@@ -1,11 +1,3 @@
 # Our dependencies are all specified in setup.py.
 
-# vumi needs to be installed from the its repository because we depend on the
-# dev version. To upgrade, use the following command:
-#   pip install --exists-action i -U -r requirements.pip
-# This will ignore any existing repository clone. It can be updated manually if
-# desired.
-
--e git+https://github.com/praekelt/vumi.git#egg=vumi
-
 -e .

@@ -7,9 +7,7 @@ setup(
     packages=find_packages(),
     include_package_data=True,
     install_requires=[
-        # NOTE: We currently depend on a developer version of vumi that must be
-        # installed before us.
-        'vumi>0.4',
+        'vumi>=0.5',
         'unidecode',
     ],
 
