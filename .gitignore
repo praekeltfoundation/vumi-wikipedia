@@ -1,6 +1,7 @@
 *.pyc
 *.*~
 _trial_temp
+/build/
 /dist/
 .coverage
 /coverage-html
