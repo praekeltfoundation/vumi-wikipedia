@@ -1,0 +1,11 @@
+{
+    "PUT /create": {
+        "request_body": {"long_url": "http://en.m.wikipedia.org/wiki/Cthulhu", "user_token": "0d200d0c5204641e572f97057da2dddc7698fd57b7f6fcf460b6a6d6c34980ef"},
+        "response_code": "200 OK",
+        "response_body": {"short_url": "http://wtxt.io/aaa"}
+    },
+
+    "So I don't have to keep screwing around with trailing commas.": null
+
+}
+

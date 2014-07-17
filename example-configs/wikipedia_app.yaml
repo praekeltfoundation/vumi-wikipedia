@@ -1,0 +1,17 @@
+worker_name: wikipedia_app
+transport_name: wikipedia_app
+
+api_url: 'http://en.wikipedia.org/w/api.php'
+user_agent: 'vumi-wikipedia/1.0 (https://github.com/praekelt/vumi-wikipedia; support@vumi.org)'
+max_session_length: 300
+
+max_ussd_content_length: 160
+max_ussd_unicode_length: 70
+max_sms_content_length: 450
+max_sms_unicode_length: 210
+
+send_sms_content: true
+send_more_sms_content: true
+
+metrics_prefix: 'vumiwiki.en'
+redis_manager: {}
