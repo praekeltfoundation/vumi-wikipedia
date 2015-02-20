@@ -366,10 +366,10 @@ class WikipediaWorker(ApplicationWorker):
         return user_hash[:char_limit]
 
     def log_action(self, msg, action, **kw):
-        # the empty value should later be replaced with the network operator ID
+        provider = msg.get('provider') or ''
         log_parts = [
             'WIKI', self.hash_user(msg.user()), msg['transport_name'],
-            msg['transport_type'], msg.get('provider', ''),
+            msg['transport_type'], provider,
             action, log_escape(msg['content']),
         ] + [u'%s=%s' % (k, log_escape(v)) for (k, v) in kw.items()]
 
