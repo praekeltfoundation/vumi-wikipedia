@@ -1,10 +1,10 @@
 from twisted.trial.unittest import TestCase
 
-from vumi_wikipedia.text_manglers import (convert_unicode,
-    normalize_whitespace, is_unicode, ContentFormatter)
+from vumi_wikipedia.text_manglers import (
+    convert_unicode, normalize_whitespace, is_unicode, ContentFormatter)
 
 
-class TextManglersTestCase(TestCase):
+class TestTextManglers(TestCase):
     def test_convert_unicode(self):
         self.assertEqual(u'a-b c', convert_unicode(u'a\u2013b\xa0c'))
 
@@ -14,7 +14,7 @@ class TextManglersTestCase(TestCase):
     def test_is_unicode(self):
         self.assertFalse(is_unicode(u'@foo^bar!'))
         self.assertTrue(is_unicode(
-                u'foobar \n \u043f\u0440\u0435\u0432\u0435\u0434'))
+            u'foobar \n \u043f\u0440\u0435\u0432\u0435\u0434'))
 
 
 UNI_BIT = u'\u044d\u0442\u043e'
@@ -28,7 +28,7 @@ def long_unicode(bits=50, suffix=u''):
     return u' '.join([UNI_BIT] * bits) + suffix
 
 
-class ContentFormatterTestCase(TestCase):
+class TestContentFormatter(TestCase):
 
     def test_format_simple(self):
         cf = ContentFormatter(160, 70)
