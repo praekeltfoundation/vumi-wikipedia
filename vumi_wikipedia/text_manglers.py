@@ -94,6 +94,13 @@ class ContentFormatter(object):
         # It doesn't all fit, so we need ellipsis and `more`
         return self._format(text, more, extra_len)
 
+    def _truncate_text(self, text, max_length):
+        truncated_text = text.rsplit(None, 1)[0]
+        if truncated_text == text:
+            # We have a single long "word", so split it in the middle.
+            truncated_text = text[:max_length]
+        return truncated_text
+
     def _format(self, content, postfix, extra_len):
         text = content
 
@@ -103,8 +110,9 @@ class ContentFormatter(object):
 
         # It doesn't all fit, so we need ellipsis and `postfix`
         postfix = self.post_ellipsis + postfix
-        while len(text) > self.get_limit(text, len(postfix)):
-            text = text.rsplit(None, 1)[0]
+        max_length = self.get_limit(text, len(postfix))
+        while len(text) > max_length:
+            text = self._truncate_text(text, max_length)
 
         # Try to break on sentence end if that won't cost too many characters.
         if self.sentence_break_threshold > 0:
