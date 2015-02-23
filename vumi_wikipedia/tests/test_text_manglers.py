@@ -95,7 +95,7 @@ class TestContentFormatter(TestCase):
     def test_format_more_very_long_words(self):
         """
         If we have a very long word at the start of our input, we split it in
-        the middle.
+        the middle, even if we have a nonzero start offset.
         """
         cf = ContentFormatter(160, 70)
         fmt = lambda txt, i: cf.format_more(txt, i, u' (more)', u' (no more)')
