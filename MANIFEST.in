@@ -7,6 +7,7 @@ include setup.py
 
 # Python package data files.
 include vumi_wikipedia/tests/wikipedia_responses.json
+include vumi_wikipedia/tests/uss_responses.json
 
 # Prune stray bytecode files.
 global-exclude *.pyc
