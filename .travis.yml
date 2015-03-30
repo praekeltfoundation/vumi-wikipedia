@@ -2,6 +2,11 @@ language: python
 python:
   - "2.6"
   - "2.7"
+matrix:
+  include:
+    # Test on pypy without coverage, because it's unnecessary and very slow.
+    - python: "pypy"
+      env: NO_COVERAGE="1"
 services:
   - redis-server
 install:
@@ -11,6 +16,7 @@ install:
   - "pip install coverage"
   - "pip install overalls"
 script:
-  - VUMITEST_REDIS_DB=1 coverage run --source=vumi_wikipedia `which trial` vumi_wikipedia
+  - if [ -z "$NO_COVERAGE" ]; then COVERAGE_CMD="coverage run --source=vumi_wikipedia"; else COVERAGE_CMD=""; fi
+  - VUMITEST_REDIS_DB=1 $COVERAGE_CMD `which trial` vumi_wikipedia
 after_success:
-  - coveralls
+  - if [ -z "$NO_COVERAGE" ]; then coveralls; fi
