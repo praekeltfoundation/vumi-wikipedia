@@ -116,6 +116,18 @@ WIKIPEDIA_RESPONSES = json.load(
     resource_stream(__name__, 'wikipedia_responses.json'))
 
 
+def rewrite_request_line(request_line):
+    """
+    Sort the request parameters in the URL path so tests don't rely on
+    deterministic dict ordering.
+    """
+    method, sp, url_path = request_line.partition(' ')
+    path, q, params = url_path.partition('?')
+    params = '&'.join(sorted(params.split('&')))
+    url_path = q.join([path, params])
+    return sp.join([method, url_path])
+
+
 class FakeHTTP(Protocol):
     def dataReceived(self, data):
         request_line, body = self.parse_request(data)
@@ -126,7 +138,7 @@ class FakeHTTP(Protocol):
     def parse_request(self, data):
         headers, _, body = data.partition('\r\n\r\n')
         headers = headers.splitlines()
-        request_line = headers.pop(0).rsplit(' ', 1)[0]
+        request_line = rewrite_request_line(headers.pop(0).rsplit(' ', 1)[0])
         self.assert_user_agent(headers)
         return request_line, body
 
@@ -159,10 +171,17 @@ class FakeHTTP(Protocol):
 
 
 class FakeHTTPTestCaseMixin(object):
+    def _reformat_response_data(self, response_data):
+        reformatted_response_data = {}
+        for request_line, stuff in response_data.iteritems():
+            request_line = rewrite_request_line(request_line)
+            reformatted_response_data[request_line] = stuff
+        return reformatted_response_data
+
     def start_webserver(self, response_data):
         factory = Factory()
         factory.protocol = FakeHTTP
-        factory.response_data = response_data
+        factory.response_data = self._reformat_response_data(response_data)
         factory.testcase = self
         webserver = reactor.listenTCP(0, factory, interface='127.0.0.1')
         self.add_cleanup(webserver.loseConnection)
