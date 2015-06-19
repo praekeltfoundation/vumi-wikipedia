@@ -140,7 +140,7 @@ class WikipediaAPI(object):
     :param bool gzip: `True` to ask for gzip encoding, `False` otherwise.
     """
 
-    URL = 'http://en.wikipedia.org/w/api.php'
+    URL = 'https://en.wikipedia.org/w/api.php'
 
     # The MediaWiki API docs request that clients use gzip encoding to reduce
     # network traffic. However, Twisted only supports this easily from 11.1.
@@ -189,7 +189,7 @@ class WikipediaAPI(object):
         :param int limit: Maximum number of results to return. (Default 9)
         :param unicode backend: The backend to use. Defaults to whatever
             Wikimedia uses. See
-            http://en.wikipedia.org/w/api.php?action=help&modules=query+search
+            https://en.wikipedia.org/w/api.php?action=help&modules=query+search
             for list of available backends.
 
         :returns: `list` of article titles matching search terms.

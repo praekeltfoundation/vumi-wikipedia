@@ -49,7 +49,7 @@ class WikipediaConfig(ApplicationWorker.CONFIG_CLASS):
         " Wikipedia. Any recent enough MediaWiki installation should be fine,"
         " although certain assumptions are made about the structure of"
         " articles that may not hold outside of Wikipedia.",
-        default='http://en.wikipedia.org/w/api.php')
+        default='https://en.wikipedia.org/w/api.php')
 
     api_timeout = ConfigInt("API call timeout in seconds.", default=5)
     include_url_in_sms = ConfigBool(
