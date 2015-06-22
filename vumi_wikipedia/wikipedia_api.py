@@ -5,6 +5,7 @@ import json
 from urllib import urlencode
 
 from twisted.internet.defer import inlineCallbacks, returnValue
+from twisted.web.client import Agent, RedirectAgent
 
 from vumi.utils import http_request_full
 from vumi import log
@@ -132,6 +133,10 @@ class ArticleSection(object):
         return section_extract
 
 
+def redirect_agent_builder(*args, **kw):
+    return RedirectAgent(Agent(*args, **kw))
+
+
 class WikipediaAPI(object):
     """
     Small Wikipedia API client library.
@@ -168,7 +173,8 @@ class WikipediaAPI(object):
         if self.PRINT_DEBUG:
             print "\n=====\n\n%s /?%s\n" % ('GET', url.split('?', 1)[1])
         response = yield http_request_full(
-            url, '', headers, method='GET', timeout=self.api_timeout)
+            url, '', headers, method='GET', timeout=self.api_timeout,
+            agent_class=redirect_agent_builder)
         if self.PRINT_DEBUG:
             print response.delivered_body
             print "\n====="

@@ -159,6 +159,15 @@ class FakeHTTP(Protocol):
         return '\r\n'.join(lines)
 
     def handle_request(self, request_line, body):
+        check_redirect = getattr(self.factory.testcase, 'check_redirect', None)
+        if check_redirect is not None:
+            verb, _, path = request_line.partition(" ")
+            if path.startswith("/REDIRECT/"):
+                request_line = "%s %s" % (verb, path[len("/REDIRECT"):])
+                # We assume check_redirect is a list.
+                check_redirect.append(request_line)
+            else:
+                return self.build_redirect_response(path)
         response_data = self.factory.response_data.get(request_line)
         if not response_data:
             self.factory.testcase.fail(
@@ -168,6 +177,14 @@ class FakeHTTP(Protocol):
             resp_body = json.dumps(resp_body)
         self.factory.testcase.assertEqual(resp_body, body)
         return self.build_response(response_data)
+
+    def build_redirect_response(self, path):
+        return "\r\n".join([
+            "HTTP/1.1 301 TLS Redirect",
+            "Location: /REDIRECT%s" % (path,),
+            "",
+            "",
+        ])
 
 
 class FakeHTTPTestCaseMixin(object):
@@ -255,3 +272,23 @@ class WikipediaAPITestCase(VumiTestCase, FakeHTTPTestCaseMixin):
         self.wikipedia = WikipediaAPI(self.fake_api.url, False, api_timeout=0)
         return self.assertFailure(
             self.wikipedia.get_extract('Cthulhu'), HttpTimeoutError)
+
+    @inlineCallbacks
+    def test_redirect(self):
+        """
+        If we get a 301 response, we must correctly redirect.
+        """
+        # The redirect magic here is ugly and hacky, but making it cleaner
+        # would require rewriting most of the fake HTTP stuff.
+        self.check_redirect = []
+
+        # Test with a search.
+        yield self.assert_api_result(
+            self.wikipedia.search('wikipedia', limit=3),
+            [u'Wikipedia', u'Wikip\xe9dia', u'Main Page'])
+        self.assertEqual(len(self.check_redirect), 1)
+
+        # Test with an article extract.
+        extract = yield self.wikipedia.get_extract('Cthulhu')
+        self.assertEqual(4, len(extract.sections))
+        self.assertEqual(len(self.check_redirect), 2)
